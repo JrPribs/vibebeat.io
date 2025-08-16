@@ -1,0 +1,95 @@
+{
+  "project": {
+    "name": "VibeBeat \u2014 Hackathon Board",
+    "description": "Lightweight Kanban for the vibebeat.io hackathon. Columns: Backlog, In Progress, Review, Done. Custom fields: Priority, Area, Phase.",
+    "columns": [
+      {
+        "name": "Backlog"
+      },
+      {
+        "name": "In Progress"
+      },
+      {
+        "name": "Review"
+      },
+      {
+        "name": "Done"
+      }
+    ],
+    "custom_fields": [
+      {
+        "name": "Priority",
+        "type": "single_select",
+        "options": [
+          "P1",
+          "P2",
+          "P3"
+        ]
+      },
+      {
+        "name": "Area",
+        "type": "single_select",
+        "options": [
+          "audio",
+          "ui",
+          "backend",
+          "storage",
+          "ai",
+          "repo",
+          "demo",
+          "qa",
+          "content",
+          "a11y"
+        ]
+      },
+      {
+        "name": "Phase",
+        "type": "single_select",
+        "options": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4-recording",
+          "5",
+          "6",
+          "7",
+          "8",
+          "9",
+          "10",
+          "11"
+        ]
+      },
+      {
+        "name": "Estimate",
+        "type": "number",
+        "unit": "h"
+      }
+    ],
+    "views": [
+      {
+        "name": "Board",
+        "type": "board",
+        "group_by": "Status"
+      },
+      {
+        "name": "P1 Focus",
+        "type": "table",
+        "filter": "Priority = P1"
+      },
+      {
+        "name": "Recording",
+        "type": "table",
+        "filter": "Area = audio AND Phase = 4-recording"
+      }
+    ]
+  },
+  "how_to_apply_with_gh_cli": {
+    "steps": [
+      "Create an empty GitHub Project (Projects \u2018beta\u2019/v2) in your org or user.",
+      "Use a small script with GitHub CLI to add columns and custom fields based on this JSON.",
+      "Then bulk add issues from github_issues_vibebeat.csv; set Status/Fields via the project UI or a follow-up script."
+    ],
+    "script_hint": "Use `gh project field-create` and `gh project column-create` iterating over this JSON. Example script intentionally omitted to keep this file importable anywhere."
+  }
+}
