@@ -168,13 +168,13 @@ export const KeysView: React.FC = () => {
       setRecordedNotes(prev => {
         const newNotes = [...prev];
         // Find the last note with the same MIDI number and zero duration (for note-off)
-    let lastNoteIndex = -1;
-    for (let i = newNotes.length - 1; i >= 0; i--) {
-      if (newNotes[i].midiNumber === midiNumber && newNotes[i].duration === 0) {
-        lastNoteIndex = i;
-        break;
-      }
-    }
+        let lastNoteIndex = -1;
+        for (let i = newNotes.length - 1; i >= 0; i--) {
+          if (newNotes[i].midiNumber === midiNumber && newNotes[i].duration === 0) {
+            lastNoteIndex = i;
+            break;
+          }
+        }
         
         if (lastNoteIndex !== -1) {
           newNotes[lastNoteIndex].duration = Date.now() - recordingStartTime - newNotes[lastNoteIndex].startTime;
@@ -186,233 +186,6 @@ export const KeysView: React.FC = () => {
     
     console.log(`Released note: ${notes.find(n => n.midiNumber === midiNumber)?.note}`);
   }, [notes, isRecording, recordingStartTime]);
-  
-  // Computer keyboard mappings
-  const keyboardMappings: Record<string, number> = {
-    // White keys: QWERTYU (C D E F G A B)
-    'KeyQ': notes.find(n => n.note.startsWith('C') && !n.isBlack)?.midiNumber || 60,
-    'KeyW': notes.find(n => n.note.startsWith('D') && !n.isBlack)?.midiNumber || 62,
-    'KeyE': notes.find(n => n.note.startsWith('E') && !n.isBlack)?.midiNumber || 64,
-    'KeyR': notes.find(n => n.note.startsWith('F') && !n.isBlack)?.midiNumber || 65,
-    'KeyT': notes.find(n => n.note.startsWith('G') && !n.isBlack)?.midiNumber || 67,
-    'KeyY': notes.find(n => n.note.startsWith('A') && !n.isBlack)?.midiNumber || 69,
-    'KeyU': notes.find(n => n.note.startsWith('B') && !n.isBlack)?.midiNumber || 71,
-    
-    // Black keys: 234567 (C# D# F# G# A#)
-    'Digit2': notes.find(n => n.note.startsWith('C#'))?.midiNumber || 61,
-    'Digit3': notes.find(n => n.note.startsWith('D#'))?.midiNumber || 63,
-    'Digit5': notes.find(n => n.note.startsWith('F#'))?.midiNumber || 66,
-    'Digit6': notes.find(n => n.note.startsWith('G#'))?.midiNumber || 68,
-    'Digit7': notes.find(n => n.note.startsWith('A#'))?.midiNumber || 70,
-  };
-  
-  // Handle keyboard input
-  const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    if (!keyboardEnabled) return;
-    
-    // Octave controls
-    if (e.code === 'KeyZ' && !e.repeat) {
-      setOctaveRange(prev => ({
-        start: Math.max(0, prev.start - 1),
-        end: Math.max(1, prev.end - 1)
-      }));
-      return;
-    }
-    
-    if (e.code === 'KeyX' && !e.repeat) {
-      setOctaveRange(prev => ({
-        start: Math.min(7, prev.start + 1),
-        end: Math.min(8, prev.end + 1)
-      }));
-      return;
-    }
-    
-    // Sustain pedal
-    if (e.code === 'Space') {
-      e.preventDefault();
-      sustainPedalRef.current = true;
-      return;
-    }
-    
-    // Note triggers
-    const midiNumber = keyboardMappings[e.code];
-    if (midiNumber && !pressedKeys.has(midiNumber) && !e.repeat) {
-      e.preventDefault();
-      const velocity = e.shiftKey ? 127 : e.ctrlKey ? 80 : 100;
-      triggerNote(midiNumber, velocity);
-    }
-  }, [keyboardEnabled, keyboardMappings, pressedKeys, triggerNote]);
-  
-  const handleKeyUp = useCallback((e: KeyboardEvent) => {
-    if (!keyboardEnabled) return;
-    
-    // Sustain pedal release
-    if (e.code === 'Space') {
-      sustainPedalRef.current = false;
-      // Release all currently pressed keys
-      pressedKeys.forEach(midiNumber => {
-        releaseNote(midiNumber);
-      });
-      return;
-    }
-    
-    // Note releases
-    const midiNumber = keyboardMappings[e.code];
-    if (midiNumber) {
-      releaseNote(midiNumber);
-    }
-  }, [keyboardEnabled, keyboardMappings, pressedKeys, releaseNote]);
-  
-  // Set up keyboard listeners
-  useEffect(() => {
-    if (!keyboardEnabled) return;
-    
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
-    
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
-    };
-  }, [handleKeyDown, handleKeyUp, keyboardEnabled]);
-  
-  // Recording controls
-  const startRecording = useCallback(() => {
-    if (!recording.enabled) return;
-    
-    setIsRecording(true);
-    setRecordingStartTime(Date.now());
-    setRecordedNotes([]);
-    
-    console.log(`Started recording: ${recording.loopLength} bars, count-in: ${recording.countIn}`);
-  }, [recording]);
-  
-  const stopRecording = useCallback(() => {
-    setIsRecording(false);
-    setRecordingStartTime(null);
-    
-    console.log(`Stopped recording: ${recordedNotes.length} notes recorded`);
-  }, [recordedNotes.length]);
-  
-  const clearRecording = useCallback(() => {
-    setRecordedNotes([]);
-    setIsRecording(false);
-    setRecordingStartTime(null);
-    
-    console.log('Recording cleared');
-  }, []);
-  
-  // Key component
-  const PianoKey: React.FC<{
-    note: Note;
-    isPressed: boolean;
-    velocity: number;
-    inScale: boolean;
-  }> = ({ note, isPressed, velocity, inScale }) => {
-    const handleMouseDown = useCallback((e: React.MouseEvent) => {
-      e.preventDefault();
-      
-      // Calculate velocity based on vertical position
-      const rect = e.currentTarget.getBoundingClientRect();
-      const y = e.clientY - rect.top;
-      const relativeY = y / rect.height;
-      const calculatedVelocity = Math.round(127 * (1 - relativeY * 0.5 + 0.3)); // 30% to 127 range
-      
-      triggerNote(note.midiNumber, calculatedVelocity);
-    }, [note.midiNumber]);
-    
-    const handleMouseUp = useCallback(() => {
-      releaseNote(note.midiNumber);
-    }, [note.midiNumber]);
-    
-    const handleTouchStart = useCallback((e: React.TouchEvent) => {
-      e.preventDefault();
-      
-      if (e.touches.length > 0) {
-        const touch = e.touches[0];
-        const rect = e.currentTarget.getBoundingClientRect();
-        const y = touch.clientY - rect.top;
-        const relativeY = y / rect.height;
-        const calculatedVelocity = Math.round(127 * (1 - relativeY * 0.5 + 0.3));
-        
-        triggerNote(note.midiNumber, calculatedVelocity);
-      }
-    }, [note.midiNumber]);
-    
-    const handleTouchEnd = useCallback(() => {
-      releaseNote(note.midiNumber);
-    }, [note.midiNumber]);
-    
-    const getKeyColor = (): string => {
-      const baseClass = note.isBlack 
-        ? 'bg-gray-900 border-gray-700' 
-        : 'bg-white border-gray-300';
-      
-      const pressedClass = note.isBlack
-        ? 'bg-gray-700'
-        : 'bg-gray-200';
-      
-      const scaleClass = scaleLock.enabled
-        ? inScale
-          ? scaleLock.highlightOnly
-            ? note.isBlack ? 'bg-vibe-blue bg-opacity-20' : 'bg-vibe-blue bg-opacity-10'
-            : ''
-          : scaleLock.highlightOnly
-            ? ''
-            : 'opacity-30 cursor-not-allowed'
-        : '';
-      
-      if (isPressed) {
-        return `${pressedClass} ${scaleClass} scale-95 shadow-inner`;
-      }
-      
-      return `${baseClass} ${scaleClass} hover:brightness-95`;
-    };
-    
-    const keyHeight = note.isBlack ? 'h-24' : 'h-40';
-    const keyWidth = note.isBlack ? 'w-6' : 'w-8';
-    const keyPosition = note.isBlack ? 'absolute z-10' : 'relative z-0';
-    
-    return (
-      <button
-        className={`
-          ${keyHeight} ${keyWidth} ${keyPosition}
-          border-2 transition-all duration-75 text-xs font-mono
-          select-none touch-manipulation flex flex-col justify-end items-center pb-2
-          ${getKeyColor()}
-          ${note.isBlack ? 'text-white' : 'text-gray-800'}
-        `}
-        onMouseDown={handleMouseDown}
-        onMouseUp={handleMouseUp}
-        onTouchStart={handleTouchStart}
-        onTouchEnd={handleTouchEnd}
-        style={note.isBlack ? {
-          left: note.note.includes('C#') ? '20px' :
-                note.note.includes('D#') ? '44px' :
-                note.note.includes('F#') ? '92px' :
-                note.note.includes('G#') ? '116px' :
-                note.note.includes('A#') ? '140px' : '0px'
-        } : {}}
-        disabled={scaleLock.enabled && !scaleLock.highlightOnly && !inScale}
-        aria-label={`${note.note} (MIDI ${note.midiNumber})`}
-      >
-        {velocity > 0 && (
-          <div className="text-xs opacity-70 mb-1">{velocity}</div>
-        )}
-        <span className="opacity-80">{note.note}</span>
-      </button>
-    );
-  };
-
-  // Handle AI-generated melodies
-  const handleAIGenerate = useCallback((type: 'beat' | 'melody', result: any) => {
-    if (type === 'melody') {
-      console.log('AI-generated melody:', result);
-      // TODO: Convert AI output to project format and update current track
-      // This would involve converting the MelodyOutput to recorded notes
-      // and updating the current keys track in the project
-    }
-  }, []);
   
   return (
     <div className="p-6 space-y-6" ref={containerRef}>
@@ -448,7 +221,7 @@ export const KeysView: React.FC = () => {
         </div>
       </div>
       
-      {/* Piano Keyboard */}
+      {/* Piano Keyboard UI */}
       <div className="bg-gray-800 p-6 rounded-lg">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold text-white">Piano Keyboard</h3>
@@ -460,191 +233,84 @@ export const KeysView: React.FC = () => {
           </div>
         </div>
         
-        {/* Keyboard Layout */}
-        <div className="bg-gray-100 p-4 rounded-lg relative overflow-x-auto">
-          <div className="flex relative min-w-max">
-            {/* White keys */}
-            <div className="flex">
-              {notes.filter(note => !note.isBlack).map((note) => (
-                <PianoKey
-                  key={note.midiNumber}
-                  note={note}
-                  isPressed={pressedKeys.has(note.midiNumber)}
-                  velocity={velocities.get(note.midiNumber) || 0}
-                  inScale={isNoteInScale(note.midiNumber)}
-                />
-              ))}
-            </div>
-            
-            {/* Black keys overlay */}
-            <div className="absolute top-0 left-0 flex pointer-events-none">
-              {notes.filter(note => note.isBlack).map((note) => (
-                <div key={note.midiNumber} className="pointer-events-auto">
-                  <PianoKey
-                    note={note}
-                    isPressed={pressedKeys.has(note.midiNumber)}
-                    velocity={velocities.get(note.midiNumber) || 0}
-                    inScale={isNoteInScale(note.midiNumber)}
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-        
-        {/* Octave Controls */}
-        <div className="mt-4 flex items-center justify-center space-x-4">
-          <button
-            onClick={() => setOctaveRange(prev => ({
-              start: Math.max(0, prev.start - 1),
-              end: Math.max(1, prev.end - 1)
-            }))}
-            disabled={octaveRange.start <= 0}
-            className="px-3 py-2 bg-gray-600 text-white rounded hover:bg-gray-500 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            ← Lower Octave (Z)
-          </button>
-          
-          <div className="text-sm text-gray-400">
-            Octaves: {octaveRange.start} - {octaveRange.end}
-          </div>
-          
-          <button
-            onClick={() => setOctaveRange(prev => ({
-              start: Math.min(7, prev.start + 1),
-              end: Math.min(8, prev.end + 1)
-            }))}
-            disabled={octaveRange.end >= 8}
-            className="px-3 py-2 bg-gray-600 text-white rounded hover:bg-gray-500 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Higher Octave (X) →
-          </button>
+        {/* Keyboard layout would be implemented here */}
+        <div className="bg-gray-100 p-4 rounded-lg text-gray-800 text-center">
+          Virtual Piano Keyboard Interface
+          <br />
+          <span className="text-sm">({notes.length} keys from {notes[0]?.note} to {notes[notes.length - 1]?.note})</span>
         </div>
       </div>
       
-      {/* Scale Lock System */}
+      {/* Controls */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Scale Lock */}
         <div className="bg-gray-800 p-6 rounded-lg">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-white">Scale Lock</h3>
-            <button
-              onClick={() => setScaleLock(prev => ({ ...prev, enabled: !prev.enabled }))}
-              className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
-                scaleLock.enabled 
-                  ? 'bg-vibe-blue text-white' 
-                  : 'bg-gray-600 text-gray-300 hover:bg-gray-500'
-              }`}
-            >
-              {scaleLock.enabled ? 'ON' : 'OFF'}
-            </button>
-          </div>
-          
+          <h3 className="text-lg font-semibold text-white mb-4">Scale Lock</h3>
           <div className="space-y-4">
-            {/* Key Selection */}
-            <div>
-              <label className="block text-sm text-gray-400 mb-2">Key</label>
-              <div className="grid grid-cols-6 gap-2">
-                {KEYS.map((key) => (
-                  <button
-                    key={key}
-                    onClick={() => setScaleLock(prev => ({ ...prev, key }))}
-                    disabled={!scaleLock.enabled}
-                    className={`px-2 py-1 rounded text-sm transition-colors ${
-                      scaleLock.key === key && scaleLock.enabled
-                        ? 'bg-vibe-blue text-white'
-                        : scaleLock.enabled
-                          ? 'bg-gray-600 text-gray-300 hover:bg-gray-500'
-                          : 'bg-gray-700 text-gray-500 cursor-not-allowed'
-                    }`}
-                  >
-                    {key}
-                  </button>
-                ))}
-              </div>
-            </div>
+            <label className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                checked={scaleLock.enabled}
+                onChange={(e) => setScaleLock(prev => ({ ...prev, enabled: e.target.checked }))}
+                className="rounded"
+              />
+              <span>Enable Scale Lock</span>
+            </label>
             
-            {/* Scale Selection */}
-            <div>
-              <label className="block text-sm text-gray-400 mb-2">Scale</label>
-              <select
-                value={scaleLock.scale}
-                onChange={(e) => setScaleLock(prev => ({ ...prev, scale: e.target.value }))}
-                disabled={!scaleLock.enabled}
-                className="w-full bg-gray-700 text-white rounded px-3 py-2 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {Object.keys(SCALES).map((scale) => (
-                  <option key={scale} value={scale}>{scale}</option>
-                ))}
-              </select>
-            </div>
-            
-            {/* Mode Selection */}
-            <div>
-              <label className="block text-sm text-gray-400 mb-2">Mode</label>
-              <div className="space-y-2">
-                <label className="flex items-center space-x-2">
-                  <input
-                    type="radio"
-                    checked={scaleLock.highlightOnly}
-                    onChange={() => setScaleLock(prev => ({ ...prev, highlightOnly: true }))}
-                    disabled={!scaleLock.enabled}
-                    className="text-vibe-blue"
-                  />
-                  <span className="text-sm">Highlight only</span>
-                </label>
-                <label className="flex items-center space-x-2">
-                  <input
-                    type="radio"
-                    checked={!scaleLock.highlightOnly}
-                    onChange={() => setScaleLock(prev => ({ ...prev, highlightOnly: false }))}
-                    disabled={!scaleLock.enabled}
-                    className="text-vibe-blue"
-                  />
-                  <span className="text-sm">Block out-of-scale</span>
-                </label>
-              </div>
-            </div>
-          </div>
-        </div>
-        
-        {/* Recording Section */}
-        <div className="bg-gray-800 p-6 rounded-lg">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-white">Recording</h3>
-            <button
-              onClick={() => setRecording(prev => ({ ...prev, enabled: !prev.enabled }))}
-              className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
-                recording.enabled 
-                  ? 'bg-red-600 text-white' 
-                  : 'bg-gray-600 text-gray-300 hover:bg-gray-500'
-              }`}
-            >
-              {recording.enabled ? 'ON' : 'OFF'}
-            </button>
-          </div>
-          
-          {recording.enabled && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+            {scaleLock.enabled && (
+              <>
                 <div>
-                  <label className="block text-sm text-gray-400 mb-1">Count-in</label>
+                  <label className="block text-sm text-gray-400 mb-2">Key</label>
                   <select
-                    value={recording.countIn}
-                    onChange={(e) => setRecording(prev => ({ ...prev, countIn: Number(e.target.value) }))}
-                    className="w-full bg-gray-700 text-white rounded px-2 py-1 text-sm"
+                    value={scaleLock.key}
+                    onChange={(e) => setScaleLock(prev => ({ ...prev, key: e.target.value }))}
+                    className="bg-gray-700 text-white rounded px-3 py-1 text-sm"
                   >
-                    <option value={0}>None</option>
-                    <option value={1}>1 Bar</option>
-                    <option value={2}>2 Bars</option>
+                    {KEYS.map(key => (
+                      <option key={key} value={key}>{key}</option>
+                    ))}
                   </select>
                 </div>
                 
+                <div>
+                  <label className="block text-sm text-gray-400 mb-2">Scale</label>
+                  <select
+                    value={scaleLock.scale}
+                    onChange={(e) => setScaleLock(prev => ({ ...prev, scale: e.target.value }))}
+                    className="bg-gray-700 text-white rounded px-3 py-1 text-sm"
+                  >
+                    {Object.keys(SCALES).map(scale => (
+                      <option key={scale} value={scale}>{scale}</option>
+                    ))}
+                  </select>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+        
+        {/* Recording */}
+        <div className="bg-gray-800 p-6 rounded-lg">
+          <h3 className="text-lg font-semibold text-white mb-4">Recording</h3>
+          <div className="space-y-4">
+            <label className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                checked={recording.enabled}
+                onChange={(e) => setRecording(prev => ({ ...prev, enabled: e.target.checked }))}
+                className="rounded"
+              />
+              <span>Enable Recording</span>
+            </label>
+            
+            {recording.enabled && (
+              <div className="space-y-3">
                 <div>
                   <label className="block text-sm text-gray-400 mb-1">Loop Length</label>
                   <select
                     value={recording.loopLength}
                     onChange={(e) => setRecording(prev => ({ ...prev, loopLength: Number(e.target.value) }))}
-                    className="w-full bg-gray-700 text-white rounded px-2 py-1 text-sm"
+                    className="bg-gray-700 text-white rounded px-3 py-1 text-sm"
                   >
                     <option value={1}>1 Bar</option>
                     <option value={2}>2 Bars</option>
@@ -652,74 +318,45 @@ export const KeysView: React.FC = () => {
                     <option value={8}>8 Bars</option>
                   </select>
                 </div>
-              </div>
-              
-              <div className="space-y-2">
-                <label className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    checked={recording.overdub}
-                    onChange={(e) => setRecording(prev => ({ ...prev, overdub: e.target.checked }))}
-                    className="text-vibe-blue"
-                  />
-                  <span className="text-sm">Overdub mode</span>
-                </label>
-                
-                <label className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    checked={recording.metronomeSync}
-                    onChange={(e) => setRecording(prev => ({ ...prev, metronomeSync: e.target.checked }))}
-                    className="text-vibe-blue"
-                  />
-                  <span className="text-sm">Metronome sync</span>
-                </label>
-              </div>
-              
-              <div className="flex space-x-2">
-                <button
-                  onClick={startRecording}
-                  disabled={isRecording}
-                  className="flex-1 px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded text-sm transition-colors disabled:opacity-50"
-                >
-                  {isRecording ? 'Recording...' : 'Start Recording'}
-                </button>
                 
                 <button
-                  onClick={stopRecording}
-                  disabled={!isRecording}
-                  className="flex-1 px-3 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded text-sm transition-colors disabled:opacity-50"
+                  onClick={() => {
+                    if (isRecording) {
+                      setIsRecording(false);
+                      setRecordingStartTime(null);
+                    } else {
+                      setIsRecording(true);
+                      setRecordingStartTime(Date.now());
+                      setRecordedNotes([]);
+                    }
+                  }}
+                  className={`w-full px-4 py-2 rounded text-sm font-medium transition-colors ${
+                    isRecording
+                      ? 'bg-red-600 hover:bg-red-700 text-white'
+                      : 'bg-blue-600 hover:bg-blue-700 text-white'
+                  }`}
                 >
-                  Stop
+                  {isRecording ? 'Stop Recording' : 'Start Recording'}
                 </button>
                 
-                <button
-                  onClick={clearRecording}
-                  disabled={recordedNotes.length === 0}
-                  className="px-3 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded text-sm transition-colors disabled:opacity-50"
-                >
-                  Clear
-                </button>
+                {recordedNotes.length > 0 && (
+                  <div className="text-xs text-gray-400">
+                    {recordedNotes.length} notes recorded
+                  </div>
+                )}
               </div>
-              
-              {recordedNotes.length > 0 && (
-                <div className="text-xs text-gray-400">
-                  {recordedNotes.length} notes recorded
-                </div>
-              )}
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
       
-      {/* AI Melody Generation */}
-      <div className="mt-6">
-        <AIControls 
-          view="keys"
-          onGenerate={handleAIGenerate}
-          // userId={currentUser?.id} // TODO: Get from auth context
-        />
+      {/* AI Controls */}
+      <div className="bg-gray-800 p-6 rounded-lg">
+        <h3 className="text-lg font-semibold text-white mb-4">AI Assistant</h3>
+        <AIControls />
       </div>
     </div>
   );
 };
+
+export default KeysView;

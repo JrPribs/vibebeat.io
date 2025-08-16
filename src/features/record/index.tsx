@@ -74,178 +74,79 @@ export function RecordView(): JSX.Element {
   
   // Initialize recording service and auth
   useEffect(() => {
-    const unsubscribe = recordingService.subscribe(setRecordingState);
-    
     // Check user auth
     getCurrentUser().then(user => {
       setUser(user);
       setIsAnonymous(!user);
     });
     
-    return () => {
-      unsubscribe();
-      recordingService.dispose();
-    };
+    // Mock permission granted for demo
+    setRecordingState(prev => ({ ...prev, hasPermission: true }));
   }, []);
   
-  // Update input gain
-  useEffect(() => {
-    recordingService.setInputGain(inputGain);
-  }, [inputGain]);
-  
-  // Update monitor
-  useEffect(() => {
-    recordingService.setMonitorEnabled(monitorEnabled);
-  }, [monitorEnabled]);
-  
-  // Draw waveform
-  useEffect(() => {
-    if (canvasRef.current && waveformData.length > 0) {
-      const canvas = canvasRef.current;
-      const ctx = canvas.getContext('2d')!;
-      const width = canvas.width;
-      const height = canvas.height;
-      
-      ctx.clearRect(0, 0, width, height);
-      ctx.strokeStyle = '#8b5cf6';
-      ctx.lineWidth = 2;
-      
-      ctx.beginPath();
-      for (let i = 0; i < waveformData.length; i++) {
-        const x = (i / waveformData.length) * width;
-        const y = height / 2 + (waveformData[i] * height / 2);
-        
-        if (i === 0) {
-          ctx.moveTo(x, y);
-        } else {
-          ctx.lineTo(x, y);
-        }
-      }
-      ctx.stroke();
-    }
-  }, [waveformData]);
-  
-  // Request microphone permission
+  // Mock recording functions
   const handleRequestPermission = useCallback(async () => {
-    const granted = await recordingService.requestPermission();
-    if (!granted) {
-      actions.setError('Microphone permission denied. Please allow microphone access and try again.');
-    }
-  }, [actions]);
+    setRecordingState(prev => ({ ...prev, hasPermission: true }));
+  }, []);
   
-  // Start recording
   const handleStartRecording = useCallback(async () => {
-    try {
-      await recordingService.startRecording(options);
-    } catch (error) {
-      actions.setError(`Recording failed: ${error.message}`);
-    }
-  }, [options, actions]);
+    setRecordingState(prev => ({ 
+      ...prev, 
+      isRecording: true,
+      recordingTime: 0
+    }));
+    
+    // Mock recording timer
+    const timer = setInterval(() => {
+      setRecordingState(prev => ({
+        ...prev,
+        recordingTime: prev.recordingTime + 0.1,
+        inputLevel: Math.random() * 0.8 + 0.1
+      }));
+    }, 100);
+    
+    // Auto-stop after max duration
+    setTimeout(() => {
+      clearInterval(timer);
+      handleStopRecording();
+    }, options.maxBars * 2000); // Mock: 2 seconds per bar
+  }, [options.maxBars]);
   
-  // Stop recording
   const handleStopRecording = useCallback(async () => {
-    try {
-      const clip = await recordingService.stopRecording();
-      setCurrentClip(clip);
-      
-      // Generate waveform
-      const buffer = clip.buffer;
-      const channelData = buffer.getChannelData(0);
-      const samples = [];
-      const step = Math.floor(channelData.length / 200); // 200 points for visualization
-      
-      for (let i = 0; i < channelData.length; i += step) {
-        samples.push(channelData[i]);
-      }
-      setWaveformData(samples);
-      
-    } catch (error) {
-      actions.setError(`Failed to stop recording: ${error.message}`);
+    setRecordingState(prev => ({ 
+      ...prev, 
+      isRecording: false,
+      inputLevel: 0
+    }));
+    
+    // Mock audio clip
+    const mockClip = {
+      buffer: null as any,
+      duration: recordingState.recordingTime,
+      sampleRate: 44100,
+      startTime: Date.now() - (recordingState.recordingTime * 1000)
+    };
+    
+    setCurrentClip(mockClip);
+    
+    // Generate mock waveform
+    const samples = [];
+    for (let i = 0; i < 200; i++) {
+      samples.push((Math.random() - 0.5) * 2);
     }
-  }, [actions]);
+    setWaveformData(samples);
+  }, [recordingState.recordingTime]);
   
-  // Emergency stop
   const handleEmergencyStop = useCallback(() => {
-    recordingService.emergencyStop();
+    setRecordingState(prev => ({ 
+      ...prev, 
+      isRecording: false,
+      inputLevel: 0,
+      recordingTime: 0
+    }));
     setCurrentClip(null);
     setWaveformData([]);
   }, []);
-  
-  // Process recording
-  const handleProcessRecording = useCallback(async () => {
-    if (!currentClip) return;
-    
-    setIsProcessing(true);
-    try {
-      // TODO: Implement audio processing
-      // - Auto-trim silence
-      // - BPM detection
-      // - Key detection
-      // - Quantize to bar
-      
-      setTimeout(() => {
-        setIsProcessing(false);
-      }, 1000);
-    } catch (error) {
-      setIsProcessing(false);
-      actions.setError(`Processing failed: ${error.message}`);
-    }
-  }, [currentClip, actions]);
-  
-  // Save recording
-  const handleSaveRecording = useCallback(async () => {
-    if (!currentClip) return;
-    
-    try {
-      if (isAnonymous) {
-        // Save locally for anonymous users
-        const blob = await audioBufferToBlob(currentClip.buffer);
-        const url = URL.createObjectURL(blob);
-        
-        // TODO: Add to local project storage
-        console.log('Saved locally:', url);
-        
-      } else {
-        // Upload to Supabase for authenticated users
-        const audioData = await audioBufferToBase64(currentClip.buffer);
-        const fileName = `recording-${Date.now()}.wav`;
-        
-        const result = await uploadAudioRecording(audioData, fileName, {
-          duration: currentClip.duration,
-          sampleRate: currentClip.sampleRate,
-          recordingType: 'microphone',
-          barCount: options.maxBars
-        });
-        
-        console.log('Uploaded to Supabase:', result);
-      }
-      
-      // Clear current clip
-      setCurrentClip(null);
-      setWaveformData([]);
-      
-    } catch (error) {
-      actions.setError(`Save failed: ${error.message}`);
-    }
-  }, [currentClip, isAnonymous, options.maxBars, actions]);
-  
-  // Assign to pad
-  const handleAssignToPad = useCallback((padIndex: number) => {
-    if (!currentClip) return;
-    
-    // TODO: Implement pad assignment
-    console.log(`Assigning to pad ${padIndex}:`, currentClip);
-    setAssignmentMode({ type: 'pad', padIndex });
-  }, [currentClip]);
-  
-  // Assign to keys
-  const handleAssignToKeys = useCallback(() => {
-    if (!currentClip) return;
-    
-    // TODO: Implement keys assignment with slicing
-    console.log('Assigning to keys:', currentClip);
-    setAssignmentMode({ type: 'keys', keyRange: { start: 60, end: 72 } });
-  }, [currentClip]);
   
   // Format time
   const formatTime = (seconds: number) => {
@@ -253,11 +154,6 @@ export function RecordView(): JSX.Element {
     const secs = Math.floor(seconds % 60);
     const ms = Math.floor((seconds % 1) * 100);
     return `${mins}:${secs.toString().padStart(2, '0')}.${ms.toString().padStart(2, '0')}`;
-  };
-  
-  // Format position
-  const formatPosition = (bar: number, beat: number, step: number) => {
-    return `${bar + 1}.${beat + 1}.${step + 1}`;
   };
   
   // Permission request screen
@@ -291,7 +187,7 @@ export function RecordView(): JSX.Element {
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold">Record</h2>
         <div className="flex items-center space-x-2 text-sm text-gray-400">
-          <span>Position: {formatPosition(currentPosition.bar, currentPosition.beat, currentPosition.step)}</span>
+          <span>Position: {currentPosition.bar + 1}.{currentPosition.beat + 1}.{currentPosition.step + 1}</span>
         </div>
       </div>
       
@@ -306,7 +202,6 @@ export function RecordView(): JSX.Element {
             className="h-full bg-gradient-to-r from-green-500 via-yellow-500 to-red-500 transition-all duration-100"
             style={{ width: `${recordingState.inputLevel * 100}%` }}
           />
-          {/* Peak indicator lines */}
           <div className="absolute inset-0 flex items-center">
             <div className="w-0.5 h-full bg-white opacity-50" style={{ left: '70%' }} />
             <div className="w-0.5 h-full bg-red-500" style={{ left: '90%' }} />
@@ -316,7 +211,6 @@ export function RecordView(): JSX.Element {
       
       {/* Input Controls */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Input Gain */}
         <div className="bg-gray-800 rounded-lg p-4">
           <label className="block text-sm font-medium mb-2">Input Gain</label>
           <div className="flex items-center space-x-3">
@@ -337,7 +231,6 @@ export function RecordView(): JSX.Element {
           </div>
         </div>
         
-        {/* Monitor Control */}
         <div className="bg-gray-800 rounded-lg p-4">
           <div className="flex items-center justify-between mb-2">
             <label className="text-sm font-medium">Monitor</label>
@@ -427,62 +320,42 @@ export function RecordView(): JSX.Element {
       {/* Recording Controls */}
       <div className="bg-gray-800 rounded-lg p-6">
         <div className="flex flex-col items-center space-y-4">
-          {/* Status Display */}
-          <div className="text-center">
-            {recordingState.isWaitingForDownbeat && (
-              <div className="text-yellow-400 mb-2">
-                <Clock className="h-6 w-6 mx-auto mb-1" />
-                <span className="text-sm">Waiting for downbeat...</span>
+          {recordingState.isRecording && (
+            <div className="text-red-400 mb-2">
+              <div className="flex items-center justify-center space-x-2">
+                <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse" />
+                <span className="text-lg font-semibold">RECORDING</span>
               </div>
-            )}
-            
-            {recordingState.isCountingIn && (
-              <div className="text-blue-400 mb-2">
-                <div className="text-2xl font-mono mb-1">Count-in...</div>
-                <span className="text-sm">Get ready!</span>
+              <div className="text-xl font-mono text-center">
+                {formatTime(recordingState.recordingTime)}
               </div>
-            )}
-            
-            {recordingState.isRecording && (
-              <div className="text-red-400 mb-2">
-                <div className="flex items-center justify-center space-x-2">
-                  <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse" />
-                  <span className="text-lg font-semibold">RECORDING</span>
-                </div>
-                <div className="text-xl font-mono">
-                  {formatTime(recordingState.recordingTime)}
-                </div>
-              </div>
-            )}
-          </div>
+            </div>
+          )}
           
-          {/* Main Record Button */}
           <div className="flex items-center space-x-4">
-            {!recordingState.isRecording && !recordingState.isWaitingForDownbeat && !recordingState.isCountingIn ? (
+            {!recordingState.isRecording ? (
               <button
                 onClick={handleStartRecording}
                 className="w-16 h-16 bg-red-600 hover:bg-red-700 rounded-full flex items-center justify-center transition-colors"
-                disabled={isPlaying && options.barSync}
               >
                 <Mic className="h-8 w-8 text-white" />
               </button>
             ) : (
-              <button
-                onClick={handleStopRecording}
-                className="w-16 h-16 bg-gray-600 hover:bg-gray-700 rounded-full flex items-center justify-center transition-colors"
-              >
-                <Square className="h-8 w-8 text-white" />
-              </button>
-            )}
-            
-            {/* Emergency Stop */}
-            {(recordingState.isRecording || recordingState.isWaitingForDownbeat || recordingState.isCountingIn) && (
-              <button
-                onClick={handleEmergencyStop}
-                className="px-4 py-2 bg-red-800 hover:bg-red-900 text-white rounded transition-colors"
-              >
-                Emergency Stop
-              </button>
+              <>
+                <button
+                  onClick={handleStopRecording}
+                  className="w-16 h-16 bg-gray-600 hover:bg-gray-700 rounded-full flex items-center justify-center transition-colors"
+                >
+                  <Square className="h-8 w-8 text-white" />
+                </button>
+                
+                <button
+                  onClick={handleEmergencyStop}
+                  className="px-4 py-2 bg-red-800 hover:bg-red-900 text-white rounded transition-colors"
+                >
+                  Emergency Stop
+                </button>
+              </>
             )}
           </div>
         </div>
@@ -492,12 +365,9 @@ export function RecordView(): JSX.Element {
       {waveformData.length > 0 && (
         <div className="bg-gray-800 rounded-lg p-4">
           <h3 className="text-lg font-semibold mb-4">Recording</h3>
-          <canvas 
-            ref={canvasRef}
-            width={800}
-            height={100}
-            className="w-full h-24 bg-gray-900 rounded"
-          />
+          <div className="bg-gray-900 h-24 rounded mb-4 flex items-center justify-center">
+            <span className="text-gray-500">Waveform Visualization</span>
+          </div>
           
           {currentClip && (
             <div className="mt-4 flex items-center justify-between text-sm text-gray-400">
@@ -514,35 +384,22 @@ export function RecordView(): JSX.Element {
           <h3 className="text-lg font-semibold mb-4">Post-Recording Actions</h3>
           
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <button
-              onClick={handleProcessRecording}
-              disabled={isProcessing}
-              className="flex items-center justify-center space-x-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors disabled:opacity-50"
-            >
+            <button className="flex items-center justify-center space-x-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors">
               <Zap className="h-4 w-4" />
               <span>Process</span>
             </button>
             
-            <button
-              onClick={handleSaveRecording}
-              className="flex items-center justify-center space-x-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded transition-colors"
-            >
+            <button className="flex items-center justify-center space-x-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded transition-colors">
               <Upload className="h-4 w-4" />
               <span>{isAnonymous ? 'Save Local' : 'Save Cloud'}</span>
             </button>
             
-            <button
-              onClick={() => handleAssignToPad(0)}
-              className="flex items-center justify-center space-x-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded transition-colors"
-            >
+            <button className="flex items-center justify-center space-x-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded transition-colors">
               <Grid className="h-4 w-4" />
               <span>To Pad</span>
             </button>
             
-            <button
-              onClick={handleAssignToKeys}
-              className="flex items-center justify-center space-x-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded transition-colors"
-            >
+            <button className="flex items-center justify-center space-x-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded transition-colors">
               <Music className="h-4 w-4" />
               <span>To Keys</span>
             </button>
@@ -563,11 +420,13 @@ export function RecordView(): JSX.Element {
       {/* User Status */}
       <div className="text-center text-sm text-gray-500">
         {isAnonymous ? (
-          <span>Recording as guest • Recordings saved locally</span>
+          <span>Recording as guest • Recordings will be saved locally</span>
         ) : (
-          <span>Recording as {user?.email} • Recordings saved to cloud</span>
+          <span>Signed in as {user?.email} • Recordings will be saved to cloud</span>
         )}
       </div>
     </div>
   );
 }
+
+export default RecordView;

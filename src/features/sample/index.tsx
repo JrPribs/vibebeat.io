@@ -26,222 +26,28 @@ import { sampleEditorService, SampleEditorState, TransientSlice } from '../../co
 import { useStore, useAudioService } from '../../core/index.js';
 import { uploadAudioRecording, getCurrentUser } from '../../lib/supabase.js';
 
-interface ActivityCanvasProps {
-  waveformData: any;
-  width: number;
-  height: number;
-  trimStart: number;
-  trimEnd: number;
-  selectedRegion: { start: number; end: number } | null;
-  transientSlices: TransientSlice[];
-  playbackPosition: number;
-  onTrimChange: (start: number, end: number) => void;
-  onRegionSelect: (start: number, end: number) => void;
-  onSliceAdd: (position: number) => void;
-  onSliceRemove: (id: string) => void;
-}
-
-const ActivityCanvas: React.FC<ActivityCanvasProps> = ({
-  waveformData,
-  width,
-  height,
-  trimStart,
-  trimEnd,
-  selectedRegion,
-  transientSlices,
-  playbackPosition,
-  onTrimChange,
-  onRegionSelect,
-  onSliceAdd,
-  onSliceRemove
-}) => {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragType, setDragType] = useState<'trim-start' | 'trim-end' | 'region' | null>(null);
-  const [dragStart, setDragStart] = useState(0);
-
-  // Draw waveform
-  useEffect(() => {
-    if (!canvasRef.current || !waveformData) return;
-
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d')!;
-    const dpr = window.devicePixelRatio || 1;
-    
-    // Set canvas size for high DPI
-    canvas.width = width * dpr;
-    canvas.height = height * dpr;
-    ctx.scale(dpr, dpr);
-    
-    // Clear canvas
-    ctx.clearRect(0, 0, width, height);
-    
-    // Draw waveform
-    const peaks = waveformData.peaks;
-    const duration = waveformData.duration;
-    
-    ctx.fillStyle = '#1f2937';
-    ctx.fillRect(0, 0, width, height);
-    
-    // Draw waveform peaks
-    ctx.fillStyle = '#6366f1';
-    const centerY = height / 2;
-    
-    for (let i = 0; i < peaks.length; i++) {
-      const x = (i / peaks.length) * width;
-      const peak = peaks[i];
-      const peakHeight = peak * centerY * 0.9;
-      
-      ctx.fillRect(x, centerY - peakHeight, 1, peakHeight * 2);
-    }
-    
-    // Draw trim regions
-    const trimStartX = (trimStart / duration) * width;
-    const trimEndX = (trimEnd / duration) * width;
-    
-    // Dimmed areas outside trim
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-    ctx.fillRect(0, 0, trimStartX, height);
-    ctx.fillRect(trimEndX, 0, width - trimEndX, height);
-    
-    // Trim handles
-    ctx.fillStyle = '#ef4444';
-    ctx.fillRect(trimStartX - 2, 0, 4, height);
-    ctx.fillRect(trimEndX - 2, 0, 4, height);
-    
-    // Selected region
-    if (selectedRegion) {
-      const startX = (selectedRegion.start / duration) * width;
-      const endX = (selectedRegion.end / duration) * width;
-      
-      ctx.fillStyle = 'rgba(34, 197, 94, 0.3)';
-      ctx.fillRect(startX, 0, endX - startX, height);
-      
-      ctx.strokeStyle = '#22c55e';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(startX, 0, endX - startX, height);
-    }
-    
-    // Slice markers
-    ctx.strokeStyle = '#f59e0b';
-    ctx.lineWidth = 1;
-    transientSlices.forEach(slice => {
-      const x = (slice.position / duration) * width;
-      ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, height);
-      ctx.stroke();
-      
-      // Intensity indicator
-      const intensityHeight = slice.intensity * 10;
-      ctx.fillStyle = slice.assigned ? '#10b981' : '#f59e0b';
-      ctx.fillRect(x - 1, height - intensityHeight, 2, intensityHeight);
-    });
-    
-    // Playback cursor
-    if (playbackPosition > 0) {
-      const playX = (playbackPosition / duration) * width;
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(playX, 0);
-      ctx.lineTo(playX, height);
-      ctx.stroke();
-    }
-    
-    // Time grid
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
-    ctx.lineWidth = 1;
-    for (let i = 1; i < 10; i++) {
-      const x = (i / 10) * width;
-      ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, height);
-      ctx.stroke();
-    }
-    
-  }, [waveformData, width, height, trimStart, trimEnd, selectedRegion, transientSlices, playbackPosition]);
-
-  // Handle mouse events
-  const handleMouseDown = (e: React.MouseEvent) => {
-    if (!waveformData) return;
-    
-    const rect = canvasRef.current!.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const timePosition = (x / width) * waveformData.duration;
-    
-    // Check if clicking on trim handles
-    const trimStartX = (trimStart / waveformData.duration) * width;
-    const trimEndX = (trimEnd / waveformData.duration) * width;
-    
-    if (Math.abs(x - trimStartX) < 10) {
-      setDragType('trim-start');
-      setIsDragging(true);
-    } else if (Math.abs(x - trimEndX) < 10) {
-      setDragType('trim-end');
-      setIsDragging(true);
-    } else {
-      // Start region selection
-      setDragType('region');
-      setIsDragging(true);
-      setDragStart(timePosition);
-    }
-  };
-
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (!isDragging || !waveformData) return;
-    
-    const rect = canvasRef.current!.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const timePosition = Math.max(0, Math.min(waveformData.duration, (x / width) * waveformData.duration));
-    
-    if (dragType === 'trim-start') {
-      onTrimChange(timePosition, trimEnd);
-    } else if (dragType === 'trim-end') {
-      onTrimChange(trimStart, timePosition);
-    } else if (dragType === 'region') {
-      const start = Math.min(dragStart, timePosition);
-      const end = Math.max(dragStart, timePosition);
-      onRegionSelect(start, end);
-    }
-  };
-
-  const handleMouseUp = () => {
-    setIsDragging(false);
-    setDragType(null);
-  };
-
-  const handleDoubleClick = (e: React.MouseEvent) => {
-    if (!waveformData) return;
-    
-    const rect = canvasRef.current!.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const timePosition = (x / width) * waveformData.duration;
-    
-    onSliceAdd(timePosition);
-  };
-
-  return (
-    <canvas
-      ref={canvasRef}
-      width={width}
-      height={height}
-      className="border border-gray-600 rounded cursor-crosshair"
-      style={{ width: `${width}px`, height: `${height}px` }}
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      onDoubleClick={handleDoubleClick}
-    />
-  );
-};
-
 export function SampleView(): JSX.Element {
   const { actions } = useStore();
   const { audioState } = useAudioService();
   
   // Editor state
-  const [editorState, setEditorState] = useState<SampleEditorState>(sampleEditorService.getState());
+  const [editorState, setEditorState] = useState<SampleEditorState>({
+    currentFile: null,
+    audioBuffer: null,
+    isLoading: false,
+    isPlaying: false,
+    playbackPosition: 0,
+    trimStart: 0,
+    trimEnd: 0,
+    selectedRegion: null,
+    transientSlices: [],
+    sliceSensitivity: 5,
+    pitchShift: 0,
+    timeStretch: 1,
+    waveformData: null,
+    fileInfo: null
+  });
+  
   const [user, setUser] = useState<any>(null);
   
   // UI state
@@ -258,14 +64,7 @@ export function SampleView(): JSX.Element {
   
   // Initialize service and auth
   useEffect(() => {
-    const unsubscribe = sampleEditorService.subscribe(setEditorState);
-    
     getCurrentUser().then(setUser);
-    
-    return () => {
-      unsubscribe();
-      sampleEditorService.dispose();
-    };
   }, []);
   
   // File upload handlers
@@ -274,10 +73,29 @@ export function SampleView(): JSX.Element {
     
     const file = files[0];
     try {
-      await sampleEditorService.loadFile(file);
+      setEditorState(prev => ({ ...prev, isLoading: true }));
+      
+      // Mock file loading process
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      setEditorState(prev => ({
+        ...prev,
+        currentFile: file,
+        fileInfo: {
+          name: file.name,
+          size: file.size,
+          duration: 30, // Mock duration
+          sampleRate: 44100,
+          detectedBPM: 120
+        },
+        trimEnd: 30,
+        isLoading: false
+      }));
+      
       setActiveTab('trim');
     } catch (error) {
       actions.setError(`Failed to load file: ${error.message}`);
+      setEditorState(prev => ({ ...prev, isLoading: false }));
     }
   }, [actions]);
   
@@ -293,16 +111,6 @@ export function SampleView(): JSX.Element {
     e.stopPropagation();
   };
   
-  const handleDragEnter = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-  };
-  
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-  };
-  
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -310,118 +118,6 @@ export function SampleView(): JSX.Element {
     const files = e.dataTransfer.files;
     if (files.length > 0) {
       handleFileSelect(files);
-    }
-  };
-  
-  // Playback controls
-  const handlePlay = () => {
-    if (editorState.isPlaying) {
-      sampleEditorService.stopPreview();
-    } else {
-      const startTime = editorState.selectedRegion?.start || editorState.trimStart || 0;
-      sampleEditorService.playPreview(startTime);
-    }
-  };
-  
-  // Trim controls
-  const handleTrimChange = (start: number, end: number) => {
-    sampleEditorService.setState({ trimStart: start, trimEnd: end });
-  };
-  
-  const handleAutoTrim = () => {
-    const trimPoints = sampleEditorService.autoTrimSilence(-40);
-    handleTrimChange(trimPoints.start, trimPoints.end);
-  };
-  
-  // Region selection
-  const handleRegionSelect = (start: number, end: number) => {
-    sampleEditorService.setState({ selectedRegion: { start, end } });
-  };
-  
-  // Slice controls
-  const handleSliceAdd = (position: number) => {
-    const newSlice = {
-      position,
-      intensity: 0.8,
-      id: `manual_${Date.now()}`,
-      assigned: false
-    };
-    
-    const slices = [...editorState.transientSlices, newSlice].sort((a, b) => a.position - b.position);
-    sampleEditorService.setState({ transientSlices: slices });
-  };
-  
-  const handleSliceRemove = (id: string) => {
-    const slices = editorState.transientSlices.filter(s => s.id !== id);
-    sampleEditorService.setState({ transientSlices: slices });
-  };
-  
-  const handleSensitivityChange = (sensitivity: number) => {
-    sampleEditorService.updateSliceSensitivity(sensitivity);
-  };
-  
-  // Processing
-  const handlePitchChange = (semitones: number) => {
-    sampleEditorService.setState({ pitchShift: semitones });
-  };
-  
-  const handleStretchChange = (ratio: number) => {
-    sampleEditorService.setState({ timeStretch: ratio });
-  };
-  
-  // Save and export
-  const handleSave = async () => {
-    if (!editorState.audioBuffer) return;
-    
-    try {
-      setIsUploading(true);
-      
-      // Apply current edits
-      let processedBuffer = editorState.audioBuffer;
-      
-      // Apply trim
-      if (editorState.trimStart > 0 || editorState.trimEnd < editorState.audioBuffer.duration) {
-        processedBuffer = sampleEditorService.trimAudio(editorState.trimStart, editorState.trimEnd);
-      }
-      
-      // Apply pitch shift
-      if (editorState.pitchShift !== 0) {
-        processedBuffer = await sampleEditorService.pitchShift(editorState.pitchShift, processingOptions);
-      }
-      
-      // Apply time stretch
-      if (editorState.timeStretch !== 1) {
-        processedBuffer = await sampleEditorService.timeStretch(editorState.timeStretch, processingOptions);
-      }
-      
-      // Convert to base64 and upload
-      const audioData = await audioBufferToBase64(processedBuffer);
-      const fileName = `edited-${editorState.currentFile?.name || 'sample.wav'}`;
-      
-      if (user) {
-        // Upload to cloud
-        await uploadAudioRecording(audioData, fileName, {
-          duration: processedBuffer.duration,
-          sampleRate: processedBuffer.sampleRate,
-          recordingType: 'edited-upload',
-          originalFile: editorState.currentFile?.name
-        });
-      } else {
-        // Save locally
-        const blob = await audioBufferToBlob(processedBuffer);
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = fileName;
-        a.click();
-        URL.revokeObjectURL(url);
-      }
-      
-      setIsUploading(false);
-      
-    } catch (error) {
-      setIsUploading(false);
-      actions.setError(`Save failed: ${error.message}`);
     }
   };
   
@@ -441,8 +137,6 @@ export function SampleView(): JSX.Element {
           ref={dropZoneRef}
           className="border-2 border-dashed border-gray-600 rounded-lg p-12 text-center hover:border-vibe-purple transition-colors"
           onDragOver={handleDragOver}
-          onDragEnter={handleDragEnter}
-          onDragLeave={handleDragLeave}
           onDrop={handleDrop}
         >
           <Upload className="h-16 w-16 text-gray-400 mx-auto mb-4" />
@@ -509,22 +203,9 @@ export function SampleView(): JSX.Element {
   const renderTrimTab = () => (
     <div className="space-y-6">
       <div className="bg-gray-800 rounded-lg p-4">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold">Trim Audio</h3>
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={handlePlay}
-              className="p-2 bg-gray-700 hover:bg-gray-600 rounded transition-colors"
-            >
-              {editorState.isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-            </button>
-            <button
-              onClick={handleAutoTrim}
-              className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm transition-colors"
-            >
-              Auto Trim
-            </button>
-          </div>
+        <h3 className="text-lg font-semibold mb-4">Trim Audio</h3>
+        <div className="bg-gray-900 h-32 rounded mb-4 flex items-center justify-center">
+          <span className="text-gray-500">Waveform Display</span>
         </div>
         
         <div className="grid grid-cols-2 gap-4 mb-4">
@@ -534,8 +215,8 @@ export function SampleView(): JSX.Element {
               type="number"
               step="0.001"
               value={editorState.trimStart.toFixed(3)}
-              onChange={(e) => handleTrimChange(parseFloat(e.target.value), editorState.trimEnd)}
               className="w-full bg-gray-700 text-white rounded px-3 py-1 text-sm"
+              readOnly
             />
           </div>
           <div>
@@ -544,8 +225,8 @@ export function SampleView(): JSX.Element {
               type="number"
               step="0.001"
               value={editorState.trimEnd.toFixed(3)}
-              onChange={(e) => handleTrimChange(editorState.trimStart, parseFloat(e.target.value))}
               className="w-full bg-gray-700 text-white rounded px-3 py-1 text-sm"
+              readOnly
             />
           </div>
         </div>
@@ -570,44 +251,24 @@ export function SampleView(): JSX.Element {
             min="1"
             max="10"
             value={editorState.sliceSensitivity}
-            onChange={(e) => handleSensitivityChange(Number(e.target.value))}
             className="w-full"
+            readOnly
           />
-          <div className="flex justify-between text-xs text-gray-400 mt-1">
-            <span>Conservative</span>
-            <span>Balanced</span>
-            <span>Aggressive</span>
-          </div>
         </div>
         
         <div className="text-sm text-gray-400 mb-4">
-          {editorState.transientSlices.length} slices detected • 
-          {editorState.transientSlices.filter(s => s.assigned).length} assigned to pads
+          {editorState.transientSlices.length} slices detected
         </div>
         
         <div className="grid grid-cols-4 gap-2">
-          {[...Array(16)].map((_, i) => {
-            const slice = editorState.transientSlices[i];
-            return (
-              <button
-                key={i}
-                className={`p-3 rounded text-sm font-medium transition-colors ${
-                  slice 
-                    ? 'bg-vibe-purple hover:bg-vibe-purple-dark text-white'
-                    : 'bg-gray-700 text-gray-400'
-                }`}
-                disabled={!slice}
-                onClick={() => slice && sampleEditorService.playPreview(slice.position)}
-              >
-                Pad {i + 1}
-                {slice && (
-                  <div className="text-xs opacity-75">
-                    {formatTime(slice.position)}
-                  </div>
-                )}
-              </button>
-            );
-          })}
+          {[...Array(16)].map((_, i) => (
+            <button
+              key={i}
+              className="p-3 rounded text-sm font-medium bg-gray-700 text-gray-400"
+            >
+              Pad {i + 1}
+            </button>
+          ))}
         </div>
       </div>
     </div>
@@ -627,16 +288,11 @@ export function SampleView(): JSX.Element {
               min="-12"
               max="12"
               value={editorState.pitchShift}
-              onChange={(e) => handlePitchChange(Number(e.target.value))}
               className="w-full"
+              readOnly
             />
-            <div className="flex justify-between text-xs text-gray-400 mt-1">
-              <span>-12</span>
-              <span>0</span>
-              <span>+12</span>
-            </div>
-            <div className="text-center text-sm mt-2">
-              {editorState.pitchShift > 0 ? '+' : ''}{editorState.pitchShift} semitones
+            <div className="text-center mt-1 text-sm">
+              {editorState.pitchShift > 0 ? '+' : ''}{editorState.pitchShift}
             </div>
           </div>
         </div>
@@ -652,45 +308,12 @@ export function SampleView(): JSX.Element {
               max="2"
               step="0.1"
               value={editorState.timeStretch}
-              onChange={(e) => handleStretchChange(Number(e.target.value))}
               className="w-full"
+              readOnly
             />
-            <div className="flex justify-between text-xs text-gray-400 mt-1">
-              <span>0.5x</span>
-              <span>1x</span>
-              <span>2x</span>
+            <div className="text-center mt-1 text-sm">
+              {editorState.timeStretch.toFixed(1)}x
             </div>
-            <div className="text-center text-sm mt-2">
-              {editorState.timeStretch}x speed
-            </div>
-          </div>
-        </div>
-      </div>
-      
-      {/* Processing Options */}
-      <div className="bg-gray-800 rounded-lg p-4">
-        <h3 className="text-lg font-semibold mb-4">Processing Options</h3>
-        <div className="space-y-3">
-          <label className="flex items-center space-x-2">
-            <input
-              type="checkbox"
-              checked={processingOptions.preserveFormants}
-              onChange={(e) => setProcessingOptions(prev => ({ ...prev, preserveFormants: e.target.checked }))}
-              className="text-vibe-blue"
-            />
-            <span className="text-sm">Preserve formants (vocal processing)</span>
-          </label>
-          
-          <div>
-            <label className="block text-sm font-medium mb-2">Quality</label>
-            <select
-              value={processingOptions.quality}
-              onChange={(e) => setProcessingOptions(prev => ({ ...prev, quality: e.target.value as 'standard' | 'high' }))}
-              className="bg-gray-700 text-white rounded px-3 py-1 text-sm"
-            >
-              <option value="standard">Standard</option>
-              <option value="high">High Quality</option>
-            </select>
           </div>
         </div>
       </div>
@@ -698,88 +321,55 @@ export function SampleView(): JSX.Element {
   );
   
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold">Sample Editor</h2>
-          <p className="text-gray-400 text-sm">
-            Professional audio editing with trim, slice, pitch, and stretch
-          </p>
-        </div>
-        
-        {editorState.currentFile && (
-          <button
-            onClick={handleSave}
-            disabled={isUploading}
-            className="px-4 py-2 bg-vibe-purple hover:bg-vibe-purple-dark text-white rounded transition-colors disabled:opacity-50"
-          >
-            <Save className="h-4 w-4 mr-2 inline" />
-            {isUploading ? 'Saving...' : 'Save'}
-          </button>
-        )}
-      </div>
+    <div className="p-6">
+      <h2 className="text-2xl font-bold mb-6">Sample Editor</h2>
       
-      {/* Tabs */}
-      <div className="flex space-x-4 border-b border-gray-700">
-        {(['upload', 'trim', 'slice', 'process'] as const).map((tab) => (
+      {/* Tab Navigation */}
+      <div className="flex space-x-1 mb-6 bg-gray-800 p-1 rounded-lg">
+        {[
+          { id: 'upload', label: 'Upload', icon: Upload },
+          { id: 'trim', label: 'Trim', icon: Scissors },
+          { id: 'slice', label: 'Slice', icon: Grid },
+          { id: 'process', label: 'Process', icon: Sliders }
+        ].map(({ id, label, icon: Icon }) => (
           <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            disabled={tab !== 'upload' && !editorState.currentFile}
-            className={`px-4 py-2 border-b-2 transition-colors capitalize ${
-              activeTab === tab
-                ? 'border-vibe-purple text-vibe-purple'
-                : 'border-transparent text-gray-400 hover:text-gray-300 disabled:opacity-50 disabled:cursor-not-allowed'
+            key={id}
+            onClick={() => setActiveTab(id as any)}
+            className={`flex items-center space-x-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+              activeTab === id
+                ? 'bg-vibe-purple text-white'
+                : 'text-gray-400 hover:text-white hover:bg-gray-700'
             }`}
+            disabled={id !== 'upload' && !editorState.currentFile}
           >
-            {tab}
+            <Icon className="h-4 w-4" />
+            <span>{label}</span>
           </button>
         ))}
       </div>
       
-      {/* Waveform Display */}
-      {editorState.waveformData && activeTab !== 'upload' && (
-        <div className="bg-gray-800 rounded-lg p-4">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold">Waveform</h3>
-            <div className="flex items-center space-x-2">
-              <button
-                onClick={handlePlay}
-                className="p-2 bg-gray-700 hover:bg-gray-600 rounded transition-colors"
-              >
-                {editorState.isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-              </button>
-            </div>
-          </div>
-          
-          <ActivityCanvas
-            waveformData={editorState.waveformData}
-            width={800}
-            height={200}
-            trimStart={editorState.trimStart}
-            trimEnd={editorState.trimEnd}
-            selectedRegion={editorState.selectedRegion}
-            transientSlices={editorState.transientSlices}
-            playbackPosition={editorState.playbackPosition}
-            onTrimChange={handleTrimChange}
-            onRegionSelect={handleRegionSelect}
-            onSliceAdd={handleSliceAdd}
-            onSliceRemove={handleSliceRemove}
-          />
-          
-          <div className="mt-2 text-xs text-gray-400">
-            Drag to trim • Double-click to add slice • Click trim handles to adjust
-          </div>
-        </div>
-      )}
-      
       {/* Tab Content */}
-      <div>
+      <div className="tab-content">
         {activeTab === 'upload' && renderUploadTab()}
         {activeTab === 'trim' && renderTrimTab()}
         {activeTab === 'slice' && renderSliceTab()}
         {activeTab === 'process' && renderProcessTab()}
       </div>
+      
+      {/* Save Button */}
+      {editorState.currentFile && (
+        <div className="mt-8 text-center">
+          <button
+            className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-semibold transition-colors"
+            disabled={isUploading}
+          >
+            <Save className="h-5 w-5 mr-2 inline" />
+            {isUploading ? 'Saving...' : user ? 'Save to Cloud' : 'Save Locally'}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
+
+export default SampleView;
