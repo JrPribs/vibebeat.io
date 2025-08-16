@@ -1,178 +1,436 @@
-import { AudioSample, PadTriggerEvent } from '../shared/models';
-import { AudioService } from './audio-service';
+// Pad Trigger Service
+// Handles drum pad triggering and pattern playback
 
-export interface PadConfig {
-  id: string;
-  sample: AudioSample;
-  velocity: number;
-  enabled: boolean;
-  midiNote?: number;
-  keyboardKey?: string;
+import type { Sample, PadName, DrumTrack, ScheduledEvent } from '../shared/models/index';
+import { audioService } from './audio-service';
+import { sampleCache } from './sample-cache';
+import { schedulerService } from './scheduler-service';
+
+interface PadTriggerOptions {
+  velocity?: number; // 0-127
+  time?: number; // Scheduled time (AudioContext time)
+  gain?: number; // 0-1
+  pan?: number; // -1 to 1
 }
 
-export class PadTriggerService {
-  private audioService: AudioService;
-  private pads: Map<string, PadConfig> = new Map();
-  private keyboardListeners: Map<string, () => void> = new Map();
-  private midiListeners: Map<number, () => void> = new Map();
-  private isListening = false;
+interface PlaybackState {
+  isPlaying: boolean;
+  currentPattern: DrumTrack | null;
+  scheduledEvents: ScheduledEvent[];
+  activeVoices: Map<string, AudioBufferSourceNode>;
+}
 
-  constructor(audioService: AudioService) {
-    this.audioService = audioService;
+class PadTriggerService {
+  private playbackState: PlaybackState = {
+    isPlaying: false,
+    currentPattern: null,
+    scheduledEvents: [],
+    activeVoices: new Map()
+  };
+  
+  private padSamples: Map<PadName, Sample> = new Map();
+  private outputGain: GainNode | null = null;
+  private padGains: Map<PadName, GainNode> = new Map();
+  private padPanners: Map<PadName, StereoPannerNode> = new Map();
+  
+  // Event listeners
+  private padTriggerListeners: ((padName: PadName, velocity: number, time: number) => void)[] = [];
+  private patternEventListeners: ((event: ScheduledEvent) => void)[] = [];
+
+  constructor() {
+    this.setupAudioNodes();
+    this.setupSchedulerIntegration();
   }
 
-  addPad(config: PadConfig): void {
-    this.pads.set(config.id, config);
-    
-    if (config.keyboardKey) {
-      this.setupKeyboardListener(config.id, config.keyboardKey);
-    }
-    
-    if (config.midiNote !== undefined) {
-      this.setupMidiListener(config.id, config.midiNote);
-    }
+  /**
+   * Set up audio processing nodes
+   */
+  private setupAudioNodes(): void {
+    const context = audioService.getState().context;
+    if (!context) return;
+
+    // Create master output gain
+    this.outputGain = context.createGain();
+    this.outputGain.gain.setValueAtTime(0.8, context.currentTime);
+    this.outputGain.connect(context.destination);
+
+    // Create individual pad processing chains
+    this.createPadAudioChains();
   }
 
-  removePad(padId: string): void {
-    const pad = this.pads.get(padId);
-    if (pad) {
-      if (pad.keyboardKey) {
-        this.removeKeyboardListener(pad.keyboardKey);
-      }
-      if (pad.midiNote !== undefined) {
-        this.removeMidiListener(pad.midiNote);
-      }
-      this.pads.delete(padId);
-    }
-  }
+  /**
+   * Create audio processing chains for each pad
+   */
+  private createPadAudioChains(): void {
+    const context = audioService.getState().context;
+    if (!context || !this.outputGain) return;
 
-  updatePad(padId: string, updates: Partial<PadConfig>): void {
-    const existing = this.pads.get(padId);
-    if (existing) {
-      const updated = { ...existing, ...updates };
-      this.pads.set(padId, updated);
+    const padNames: PadName[] = [
+      'KICK', 'SNARE', 'HIHAT_CLOSED', 'HIHAT_OPEN',
+      'CLAP', 'CRASH', 'RIDE', 'TOM_HIGH',
+      'TOM_MID', 'TOM_FLOOR', 'PERC_01', 'PERC_02',
+      'PAD_13', 'PAD_14', 'PAD_15', 'PAD_16'
+    ];
+
+    for (const padName of padNames) {
+      // Create gain node for this pad
+      const gainNode = context.createGain();
+      gainNode.gain.setValueAtTime(1.0, context.currentTime);
       
-      // Update listeners if keyboard key or MIDI note changed
-      if (updates.keyboardKey !== undefined && updates.keyboardKey !== existing.keyboardKey) {
-        if (existing.keyboardKey) {
-          this.removeKeyboardListener(existing.keyboardKey);
-        }
-        if (updates.keyboardKey) {
-          this.setupKeyboardListener(padId, updates.keyboardKey);
-        }
-      }
+      // Create panner node for this pad
+      const pannerNode = context.createStereoPanner();
+      pannerNode.pan.setValueAtTime(0, context.currentTime);
       
-      if (updates.midiNote !== undefined && updates.midiNote !== existing.midiNote) {
-        if (existing.midiNote !== undefined) {
-          this.removeMidiListener(existing.midiNote);
-        }
-        if (updates.midiNote !== undefined) {
-          this.setupMidiListener(padId, updates.midiNote);
-        }
-      }
+      // Connect: panner -> gain -> output
+      pannerNode.connect(gainNode);
+      gainNode.connect(this.outputGain);
+      
+      this.padGains.set(padName, gainNode);
+      this.padPanners.set(padName, pannerNode);
     }
   }
 
-  async triggerPad(padId: string, velocity: number = 1): Promise<void> {
-    const pad = this.pads.get(padId);
-    if (!pad || !pad.enabled) {
+  /**
+   * Set up integration with scheduler service
+   */
+  private setupSchedulerIntegration(): void {
+    // Listen for scheduled events from the scheduler
+    schedulerService.onEvent((event) => {
+      if (event.type === 'pad' && event.data.padName) {
+        this.triggerPad(
+          event.data.padName as PadName,
+          {
+            velocity: event.data.velocity || 100,
+            time: event.actualTime
+          }
+        );
+      }
+    });
+
+    // Listen for transport changes
+    schedulerService.onTransportChange((state) => {
+      if (state.isPlaying && !this.playbackState.isPlaying) {
+        this.startPatternPlayback();
+      } else if (!state.isPlaying && this.playbackState.isPlaying) {
+        this.stopPatternPlayback();
+      }
+    });
+  }
+
+  /**
+   * Load samples for a specific kit
+   */
+  async loadKitSamples(kitId: string): Promise<void> {
+    try {
+      const samples = await sampleCache.loadFactoryKit(kitId);
+      
+      // Update pad samples mapping
+      for (const [padName, sample] of samples.entries()) {
+        this.padSamples.set(padName, sample);
+      }
+      
+      console.log(`Loaded ${samples.size} pad samples for kit: ${kitId}`);
+      
+    } catch (error) {
+      console.error('Failed to load kit samples:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Trigger a drum pad manually or programmatically
+   */
+  triggerPad(padName: PadName, options: PadTriggerOptions = {}): void {
+    const context = audioService.getState().context;
+    if (!context) {
+      console.warn('AudioContext not available');
       return;
     }
 
-    const effectiveVelocity = velocity * pad.velocity;
-    
+    const sample = this.padSamples.get(padName);
+    if (!sample) {
+      console.warn(`No sample loaded for pad: ${padName}`);
+      return;
+    }
+
+    const {
+      velocity = 100,
+      time = context.currentTime,
+      gain = 1.0,
+      pan = 0
+    } = options;
+
     try {
-      await this.audioService.playSample(pad.sample, effectiveVelocity);
+      // Create audio buffer source
+      const source = context.createBufferSource();
+      source.buffer = sample.buffer;
       
-      // Emit trigger event for UI feedback, recording, etc.
-      this.emitTriggerEvent({
-        padId,
-        sample: pad.sample,
-        velocity: effectiveVelocity,
-        timestamp: Date.now(),
-        source: 'manual'
-      });
-    } catch (error) {
-      console.error(`Failed to trigger pad ${padId}:`, error);
-    }
-  }
-
-  private setupKeyboardListener(padId: string, key: string): void {
-    const listener = (event: KeyboardEvent) => {
-      if (event.code === key && !event.repeat) {
-        event.preventDefault();
-        this.triggerPad(padId, 1);
+      // Create gain node for this voice
+      const voiceGain = context.createGain();
+      
+      // Calculate final gain (velocity + voice gain + pad gain)
+      const velocityGain = velocity / 127; // Convert MIDI velocity to 0-1
+      const finalGain = velocityGain * gain;
+      voiceGain.gain.setValueAtTime(finalGain, time);
+      
+      // Get pad's processing chain
+      const padPanner = this.padPanners.get(padName);
+      if (!padPanner) {
+        console.warn(`No panner found for pad: ${padName}`);
+        return;
       }
-    };
-    
-    document.addEventListener('keydown', listener);
-    this.keyboardListeners.set(key, () => {
-      document.removeEventListener('keydown', listener);
-    });
-  }
-
-  private removeKeyboardListener(key: string): void {
-    const cleanup = this.keyboardListeners.get(key);
-    if (cleanup) {
-      cleanup();
-      this.keyboardListeners.delete(key);
+      
+      // Apply temporary pan if specified
+      if (pan !== 0) {
+        const tempPanner = context.createStereoPanner();
+        tempPanner.pan.setValueAtTime(pan, time);
+        source.connect(voiceGain);
+        voiceGain.connect(tempPanner);
+        tempPanner.connect(padPanner);
+      } else {
+        source.connect(voiceGain);
+        voiceGain.connect(padPanner);
+      }
+      
+      // Schedule playback
+      source.start(time);
+      
+      // Clean up when finished
+      const voiceId = `${padName}-${Date.now()}-${Math.random()}`;
+      this.playbackState.activeVoices.set(voiceId, source);
+      
+      source.onended = () => {
+        this.playbackState.activeVoices.delete(voiceId);
+        source.disconnect();
+        voiceGain.disconnect();
+      };
+      
+      // Notify listeners
+      this.padTriggerListeners.forEach(listener => {
+        listener(padName, velocity, time);
+      });
+      
+    } catch (error) {
+      console.error('Failed to trigger pad:', error);
     }
   }
 
-  private setupMidiListener(padId: string, midiNote: number): void {
-    // MIDI implementation would go here
-    // For now, just store the mapping
-    this.midiListeners.set(midiNote, () => {
-      this.triggerPad(padId, 1);
-    });
-  }
-
-  private removeMidiListener(midiNote: number): void {
-    this.midiListeners.delete(midiNote);
-  }
-
-  private emitTriggerEvent(event: PadTriggerEvent): void {
-    // Emit custom event for other components to listen to
-    window.dispatchEvent(new CustomEvent('padTrigger', { detail: event }));
-  }
-
-  startListening(): void {
-    this.isListening = true;
-  }
-
-  stopListening(): void {
-    this.isListening = false;
-  }
-
-  getPad(padId: string): PadConfig | undefined {
-    return this.pads.get(padId);
-  }
-
-  getAllPads(): PadConfig[] {
-    return Array.from(this.pads.values());
-  }
-
-  getEnabledPads(): PadConfig[] {
-    return this.getAllPads().filter(pad => pad.enabled);
-  }
-
-  setPadEnabled(padId: string, enabled: boolean): void {
-    this.updatePad(padId, { enabled });
-  }
-
-  setPadVelocity(padId: string, velocity: number): void {
-    this.updatePad(padId, { velocity: Math.max(0, Math.min(1, velocity)) });
-  }
-
-  clear(): void {
-    // Remove all listeners
-    this.keyboardListeners.forEach(cleanup => cleanup());
-    this.keyboardListeners.clear();
-    this.midiListeners.clear();
+  /**
+   * Set the current drum pattern for playback
+   */
+  setPattern(pattern: DrumTrack): void {
+    this.playbackState.currentPattern = pattern;
     
-    // Clear pads
-    this.pads.clear();
+    // Clear existing scheduled events
+    this.clearScheduledEvents();
     
-    this.isListening = false;
+    // Schedule new pattern if playing
+    if (this.playbackState.isPlaying) {
+      this.schedulePatternEvents();
+    }
+  }
+
+  /**
+   * Start pattern playback
+   */
+  private startPatternPlayback(): void {
+    this.playbackState.isPlaying = true;
+    
+    if (this.playbackState.currentPattern) {
+      this.schedulePatternEvents();
+    }
+  }
+
+  /**
+   * Stop pattern playback
+   */
+  private stopPatternPlayback(): void {
+    this.playbackState.isPlaying = false;
+    this.clearScheduledEvents();
+    this.stopAllVoices();
+  }
+
+  /**
+   * Schedule events for the current pattern
+   */
+  private schedulePatternEvents(): void {
+    const pattern = this.playbackState.currentPattern;
+    if (!pattern) return;
+
+    // Clear existing events
+    this.clearScheduledEvents();
+
+    // Schedule events for each pad
+    for (const padData of pattern.pads) {
+      for (const hit of padData.hits) {
+        const event: ScheduledEvent = {
+          id: `${padData.pad}-${hit.step}-${Date.now()}`,
+          type: 'pad',
+          time: 0, // Will be calculated by scheduler
+          data: {
+            padName: padData.pad,
+            velocity: hit.vel
+          }
+        };
+        
+        // Schedule with the scheduler service
+        // The scheduler will call our trigger method at the right time
+        schedulerService.scheduleEvent(event);
+        
+        this.playbackState.scheduledEvents.push(event);
+      }
+    }
+    
+    console.log(
+      `Scheduled ${this.playbackState.scheduledEvents.length} pattern events`
+    );
+  }
+
+  /**
+   * Clear all scheduled events
+   */
+  private clearScheduledEvents(): void {
+    schedulerService.clearEvents();
+    this.playbackState.scheduledEvents = [];
+  }
+
+  /**
+   * Stop all currently playing voices
+   */
+  private stopAllVoices(): void {
+    const context = audioService.getState().context;
+    if (!context) return;
+
+    for (const [voiceId, source] of this.playbackState.activeVoices) {
+      try {
+        source.stop(context.currentTime);
+      } catch (error) {
+        // Voice might already be stopped
+      }
+    }
+    
+    this.playbackState.activeVoices.clear();
+  }
+
+  /**
+   * Set pad-specific gain
+   */
+  setPadGain(padName: PadName, gain: number): void {
+    const padGain = this.padGains.get(padName);
+    if (!padGain) return;
+
+    const context = audioService.getState().context;
+    if (!context) return;
+
+    const clampedGain = Math.max(0, Math.min(1, gain));
+    padGain.gain.setValueAtTime(clampedGain, context.currentTime);
+  }
+
+  /**
+   * Set pad-specific panning
+   */
+  setPadPan(padName: PadName, pan: number): void {
+    const padPanner = this.padPanners.get(padName);
+    if (!padPanner) return;
+
+    const context = audioService.getState().context;
+    if (!context) return;
+
+    const clampedPan = Math.max(-1, Math.min(1, pan));
+    padPanner.pan.setValueAtTime(clampedPan, context.currentTime);
+  }
+
+  /**
+   * Set master output gain
+   */
+  setMasterGain(gain: number): void {
+    if (!this.outputGain) return;
+
+    const context = audioService.getState().context;
+    if (!context) return;
+
+    const clampedGain = Math.max(0, Math.min(1, gain));
+    this.outputGain.gain.setValueAtTime(clampedGain, context.currentTime);
+  }
+
+  /**
+   * Get current playback state
+   */
+  getPlaybackState(): PlaybackState {
+    return {
+      ...this.playbackState,
+      activeVoices: new Map(this.playbackState.activeVoices)
+    };
+  }
+
+  /**
+   * Get loaded pad samples
+   */
+  getPadSamples(): Map<PadName, Sample> {
+    return new Map(this.padSamples);
+  }
+
+  /**
+   * Check if a pad has a loaded sample
+   */
+  hasPadSample(padName: PadName): boolean {
+    return this.padSamples.has(padName);
+  }
+
+  // Event listener management
+  onPadTrigger(listener: (padName: PadName, velocity: number, time: number) => void): () => void {
+    this.padTriggerListeners.push(listener);
+    return () => {
+      const index = this.padTriggerListeners.indexOf(listener);
+      if (index > -1) this.padTriggerListeners.splice(index, 1);
+    };
+  }
+
+  onPatternEvent(listener: (event: ScheduledEvent) => void): () => void {
+    this.patternEventListeners.push(listener);
+    return () => {
+      const index = this.patternEventListeners.indexOf(listener);
+      if (index > -1) this.patternEventListeners.splice(index, 1);
+    };
+  }
+
+  /**
+   * Destroy the service and clean up resources
+   */
+  destroy(): void {
+    this.stopAllVoices();
+    this.clearScheduledEvents();
+    
+    // Disconnect audio nodes
+    if (this.outputGain) {
+      this.outputGain.disconnect();
+      this.outputGain = null;
+    }
+    
+    for (const gainNode of this.padGains.values()) {
+      gainNode.disconnect();
+    }
+    
+    for (const pannerNode of this.padPanners.values()) {
+      pannerNode.disconnect();
+    }
+    
+    this.padGains.clear();
+    this.padPanners.clear();
+    this.padSamples.clear();
+  }
+
+  // Singleton pattern
+  private static instance: PadTriggerService | null = null;
+  
+  static getInstance(): PadTriggerService {
+    if (!PadTriggerService.instance) {
+      PadTriggerService.instance = new PadTriggerService();
+    }
+    return PadTriggerService.instance;
   }
 }
+
+// Export singleton instance
+export const padTriggerService = PadTriggerService.getInstance();
+export default padTriggerService;

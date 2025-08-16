@@ -1,321 +1,352 @@
-export interface RecordingSession {
-  id: string;
-  name: string;
+// Recording Service - Phase 4
+// Comprehensive microphone recording with bar-sync, processing, and assignment
+
+import { schedulerService } from './scheduler-service';
+
+export interface RecordingOptions {
+  barSync: boolean;
+  countIn: boolean;
+  maxBars: number;
+  autoTrim: boolean;
+  quantizeToBar: boolean;
+}
+
+export interface AudioClip {
+  buffer: AudioBuffer;
+  duration: number;
+  sampleRate: number;
+  originalSampleRate: number;
   startTime: number;
-  endTime?: number;
-  tracks: RecordingTrack[];
-  bpm: number;
-  timeSignature: [number, number];
+  endTime: number;
+  metadata: {
+    barSync: boolean;
+    bpm?: number;
+    key?: string;
+    slices?: { time: number; intensity: number }[];
+    trimmed?: { start: number; end: number };
+  };
 }
 
-export interface RecordingTrack {
-  id: string;
-  name: string;
-  events: RecordingEvent[];
-  muted: boolean;
-  volume: number;
+export interface RecordingState {
+  isRecording: boolean;
+  isWaitingForDownbeat: boolean;
+  isCountingIn: boolean;
+  hasPermission: boolean;
+  inputLevel: number;
+  recordingTime: number;
+  currentClip: AudioClip | null;
+  error: string | null;
 }
 
-export interface RecordingEvent {
-  timestamp: number;
-  type: 'pad' | 'note' | 'cc';
-  data: PadEvent | NoteEvent | CCEvent;
-}
-
-export interface PadEvent {
-  padId: string;
-  velocity: number;
-}
-
-export interface NoteEvent {
-  note: number;
-  velocity: number;
-  duration?: number;
-}
-
-export interface CCEvent {
-  controller: number;
-  value: number;
-}
-
-export class RecordingService {
+class RecordingService {
+  private mediaStream: MediaStream | null = null;
+  private sourceNode: MediaStreamAudioSourceNode | null = null;
+  private analyzerNode: AnalyserNode | null = null;
+  private gainNode: GainNode | null = null;
+  private monitorGainNode: GainNode | null = null;
+  private audioContext: AudioContext | null = null;
+  private recorder: MediaRecorder | null = null;
+  private recordedChunks: Blob[] = [];
   private isRecording = false;
-  private currentSession?: RecordingSession;
-  private recordingStartTime = 0;
-  private audioContext?: AudioContext;
-  private recordedEvents: RecordingEvent[] = [];
-  private metronomeEnabled = true;
-  private countInBars = 1;
+  private isWaitingForDownbeat = false;
   private isCountingIn = false;
-  private countInStartTime = 0;
+  private recordingStartTime = 0;
+  private inputLevel = 0;
+  private listeners: ((state: RecordingState) => void)[] = [];
+  private animationFrame: number | null = null;
 
-  constructor(audioContext?: AudioContext) {
-    this.audioContext = audioContext;
-    this.setupEventListeners();
+  // State getters
+  get state(): RecordingState {
+    return {
+      isRecording: this.isRecording,
+      isWaitingForDownbeat: this.isWaitingForDownbeat,
+      isCountingIn: this.isCountingIn,
+      hasPermission: this.mediaStream !== null,
+      inputLevel: this.inputLevel,
+      recordingTime: this.isRecording ? (Date.now() - this.recordingStartTime) / 1000 : 0,
+      currentClip: null, // Will be set after recording
+      error: null
+    };
   }
 
-  startRecording(sessionName: string, bpm: number = 120, timeSignature: [number, number] = [4, 4]): void {
-    if (this.isRecording) {
-      this.stopRecording();
+  // Request microphone permission
+  async requestPermission(): Promise<boolean> {
+    try {
+      this.mediaStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          channelCount: 1,
+          sampleRate: 44100,
+          autoGainControl: false,
+          noiseSuppression: false,
+          echoCancellation: true
+        }
+      });
+
+      await this.setupAudioNodes();
+      this.startInputMonitoring();
+      this.notifyListeners();
+      return true;
+    } catch (error) {
+      console.error('Microphone permission denied:', error);
+      this.notifyListeners();
+      return false;
+    }
+  }
+
+  // Setup Web Audio API nodes
+  private async setupAudioNodes(): Promise<void> {
+    if (!this.mediaStream) throw new Error('No media stream available');
+
+    // Create or reuse audio context
+    if (!this.audioContext) {
+      this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({
+        sampleRate: 44100,
+        latencyHint: 'interactive'
+      });
     }
 
-    this.currentSession = {
-      id: this.generateSessionId(),
-      name: sessionName,
-      startTime: Date.now(),
-      tracks: [{
-        id: 'main',
-        name: 'Main Track',
-        events: [],
-        muted: false,
-        volume: 1.0
-      }],
-      bpm,
-      timeSignature
+    // Ensure audio context is running
+    if (this.audioContext.state === 'suspended') {
+      await this.audioContext.resume();
+    }
+
+    // Create audio nodes
+    this.sourceNode = this.audioContext.createMediaStreamSource(this.mediaStream);
+    this.gainNode = this.audioContext.createGain();
+    this.analyzerNode = this.audioContext.createAnalyser();
+    this.monitorGainNode = this.audioContext.createGain();
+
+    // Configure analyzer
+    this.analyzerNode.fftSize = 256;
+    this.analyzerNode.smoothingTimeConstant = 0.3;
+
+    // Connect nodes
+    this.sourceNode.connect(this.gainNode);
+    this.gainNode.connect(this.analyzerNode);
+    this.gainNode.connect(this.monitorGainNode);
+    this.monitorGainNode.connect(this.audioContext.destination);
+
+    // Set initial values
+    this.setInputGain(0); // 0dB
+    this.setMonitorEnabled(false); // Monitor off by default for safety
+  }
+
+  // Set input gain (-20dB to +20dB)
+  setInputGain(gainDb: number): void {
+    if (this.gainNode) {
+      const gainLinear = Math.pow(10, gainDb / 20);
+      this.gainNode.gain.setValueAtTime(gainLinear, this.audioContext!.currentTime);
+    }
+  }
+
+  // Set monitor enabled/disabled
+  setMonitorEnabled(enabled: boolean): void {
+    if (this.monitorGainNode) {
+      // Use a small gain to avoid complete silence but allow monitoring
+      this.monitorGainNode.gain.setValueAtTime(enabled ? 0.5 : 0, this.audioContext!.currentTime);
+    }
+  }
+
+  // Start input level monitoring
+  private startInputMonitoring(): void {
+    if (!this.analyzerNode) return;
+
+    const dataArray = new Uint8Array(this.analyzerNode.frequencyBinCount);
+    
+    const updateLevel = () => {
+      if (!this.analyzerNode) return;
+      
+      this.analyzerNode.getByteFrequencyData(dataArray);
+      
+      // Calculate RMS level
+      let sum = 0;
+      for (let i = 0; i < dataArray.length; i++) {
+        sum += dataArray[i] * dataArray[i];
+      }
+      const rms = Math.sqrt(sum / dataArray.length);
+      this.inputLevel = rms / 255; // Normalize to 0-1
+      
+      this.notifyListeners();
+      this.animationFrame = requestAnimationFrame(updateLevel);
+    };
+    
+    updateLevel();
+  }
+
+  // Start recording with options
+  async startRecording(options: RecordingOptions): Promise<void> {
+    if (!this.mediaStream) {
+      throw new Error('No microphone permission');
+    }
+
+    if (this.isRecording) {
+      throw new Error('Already recording');
+    }
+
+    this.recordedChunks = [];
+    
+    // Setup MediaRecorder
+    this.recorder = new MediaRecorder(this.mediaStream, {
+      mimeType: 'audio/webm;codecs=opus'
+    });
+
+    this.recorder.ondataavailable = (event) => {
+      if (event.data.size > 0) {
+        this.recordedChunks.push(event.data);
+      }
     };
 
-    this.recordedEvents = [];
-    
-    if (this.countInBars > 0) {
-      this.startCountIn();
+    if (options.barSync) {
+      // Wait for next downbeat using scheduler
+      this.isWaitingForDownbeat = true;
+      this.notifyListeners();
+      
+      // Subscribe to scheduler for next downbeat
+      const unsubscribeStep = schedulerService.onStep((step, beat, bar, time) => {
+        if (step === 0 && beat === 0) { // Downbeat
+          unsubscribeStep();
+          this.isWaitingForDownbeat = false;
+          if (options.countIn) {
+            this.startCountIn(() => this.actuallyStartRecording(options));
+          } else {
+            this.actuallyStartRecording(options);
+          }
+        }
+      });
     } else {
-      this.beginRecording();
+      if (options.countIn) {
+        this.startCountIn(() => this.actuallyStartRecording(options));
+      } else {
+        this.actuallyStartRecording(options);
+      }
     }
   }
 
-  private startCountIn(): void {
+  // Start count-in sequence
+  private startCountIn(callback: () => void): void {
     this.isCountingIn = true;
-    this.countInStartTime = this.audioContext?.currentTime || Date.now() / 1000;
+    this.notifyListeners();
     
-    const countInDuration = this.getCountInDuration();
-    
-    if (this.metronomeEnabled) {
-      this.startMetronome(true);
-    }
-    
+    // TODO: Connect to metronome for count-in
+    // For now, simulate 1 bar count-in
     setTimeout(() => {
       this.isCountingIn = false;
-      this.beginRecording();
-    }, countInDuration * 1000);
-    
-    this.emitRecordingEvent('countInStarted', {
-      duration: countInDuration,
-      bars: this.countInBars
-    });
+      callback();
+    }, 2000); // 2 seconds for 1 bar at 120 BPM
   }
 
-  private beginRecording(): void {
+  // Actually start recording
+  private actuallyStartRecording(options: RecordingOptions): void {
+    if (!this.recorder) return;
+    
     this.isRecording = true;
-    this.recordingStartTime = this.audioContext?.currentTime || Date.now() / 1000;
+    this.recordingStartTime = Date.now();
+    this.recorder.start(100); // Collect data every 100ms
     
-    if (this.metronomeEnabled && !this.isCountingIn) {
-      this.startMetronome(false);
-    }
+    // Auto-stop after max duration
+    setTimeout(() => {
+      if (this.isRecording) {
+        this.stopRecording();
+      }
+    }, options.maxBars * 2000); // 2 seconds per bar at 120 BPM
     
-    this.emitRecordingEvent('recordingStarted', {
-      sessionId: this.currentSession?.id,
-      startTime: this.recordingStartTime
+    this.notifyListeners();
+  }
+
+  // Stop recording
+  async stopRecording(): Promise<AudioClip> {
+    return new Promise((resolve, reject) => {
+      if (!this.recorder || !this.isRecording) {
+        reject(new Error('Not recording'));
+        return;
+      }
+
+      this.recorder.onstop = async () => {
+        try {
+          const audioBlob = new Blob(this.recordedChunks, { type: 'audio/webm' });
+          const audioBuffer = await this.convertBlobToAudioBuffer(audioBlob);
+          const clip = await this.processRecording(audioBuffer);
+          
+          this.isRecording = false;
+          this.notifyListeners();
+          
+          resolve(clip);
+        } catch (error) {
+          reject(error);
+        }
+      };
+
+      this.recorder.stop();
     });
   }
 
-  stopRecording(): RecordingSession | null {
-    if (!this.isRecording && !this.isCountingIn) {
-      return null;
-    }
-
-    this.isRecording = false;
-    this.isCountingIn = false;
-    this.stopMetronome();
-
-    if (this.currentSession) {
-      this.currentSession.endTime = Date.now();
-      this.currentSession.tracks[0].events = [...this.recordedEvents];
-      
-      this.emitRecordingEvent('recordingStopped', {
-        session: this.currentSession,
-        eventCount: this.recordedEvents.length
-      });
-      
-      const session = this.currentSession;
-      this.currentSession = undefined;
-      this.recordedEvents = [];
-      
-      return session;
-    }
-
-    return null;
+  // Convert blob to AudioBuffer
+  private async convertBlobToAudioBuffer(blob: Blob): Promise<AudioBuffer> {
+    const arrayBuffer = await blob.arrayBuffer();
+    return this.audioContext!.decodeAudioData(arrayBuffer);
   }
 
-  pauseRecording(): void {
-    if (this.isRecording) {
+  // Process recorded audio
+  private async processRecording(buffer: AudioBuffer): Promise<AudioClip> {
+    const clip: AudioClip = {
+      buffer,
+      duration: buffer.duration,
+      sampleRate: buffer.sampleRate,
+      originalSampleRate: buffer.sampleRate,
+      startTime: 0,
+      endTime: buffer.duration,
+      metadata: {
+        barSync: false
+      }
+    };
+
+    // TODO: Implement post-processing
+    // - Auto-trim silence
+    // - BPM detection
+    // - Key detection
+    // - Quantize to bar
+
+    return clip;
+  }
+
+  // Emergency stop
+  emergencyStop(): void {
+    if (this.recorder && this.isRecording) {
+      this.recorder.stop();
       this.isRecording = false;
-      this.stopMetronome();
-      
-      this.emitRecordingEvent('recordingPaused', {
-        sessionId: this.currentSession?.id
-      });
+      this.isWaitingForDownbeat = false;
+      this.isCountingIn = false;
+      this.notifyListeners();
     }
   }
 
-  resumeRecording(): void {
-    if (this.currentSession && !this.isRecording) {
-      this.isRecording = true;
-      
-      if (this.metronomeEnabled) {
-        this.startMetronome(false);
-      }
-      
-      this.emitRecordingEvent('recordingResumed', {
-        sessionId: this.currentSession.id
-      });
-    }
-  }
-
-  private setupEventListeners(): void {
-    // Listen for pad trigger events
-    window.addEventListener('padTrigger', (event: any) => {
-      if (this.isRecording) {
-        this.recordPadEvent(event.detail);
-      }
-    });
-    
-    // Listen for MIDI events if available
-    window.addEventListener('midiNote', (event: any) => {
-      if (this.isRecording) {
-        this.recordNoteEvent(event.detail);
-      }
-    });
-  }
-
-  private recordPadEvent(padEvent: any): void {
-    const currentTime = this.audioContext?.currentTime || Date.now() / 1000;
-    const relativeTime = currentTime - this.recordingStartTime;
-    
-    const recordingEvent: RecordingEvent = {
-      timestamp: relativeTime,
-      type: 'pad',
-      data: {
-        padId: padEvent.padId,
-        velocity: padEvent.velocity
-      }
+  // Subscribe to state changes
+  subscribe(listener: (state: RecordingState) => void): () => void {
+    this.listeners.push(listener);
+    return () => {
+      this.listeners = this.listeners.filter(l => l !== listener);
     };
-    
-    this.recordedEvents.push(recordingEvent);
-    
-    this.emitRecordingEvent('eventRecorded', {
-      event: recordingEvent,
-      totalEvents: this.recordedEvents.length
-    });
   }
 
-  private recordNoteEvent(noteEvent: any): void {
-    const currentTime = this.audioContext?.currentTime || Date.now() / 1000;
-    const relativeTime = currentTime - this.recordingStartTime;
-    
-    const recordingEvent: RecordingEvent = {
-      timestamp: relativeTime,
-      type: 'note',
-      data: {
-        note: noteEvent.note,
-        velocity: noteEvent.velocity,
-        duration: noteEvent.duration
-      }
-    };
-    
-    this.recordedEvents.push(recordingEvent);
-    
-    this.emitRecordingEvent('eventRecorded', {
-      event: recordingEvent,
-      totalEvents: this.recordedEvents.length
-    });
+  // Notify all listeners
+  private notifyListeners(): void {
+    this.listeners.forEach(listener => listener(this.state));
   }
 
-  private startMetronome(isCountIn: boolean): void {
-    // Metronome implementation would go here
-    // For now, just emit events for metronome beats
-    this.emitRecordingEvent('metronomeStarted', { isCountIn });
-  }
-
-  private stopMetronome(): void {
-    this.emitRecordingEvent('metronomeStopped', {});
-  }
-
-  private getCountInDuration(): number {
-    if (!this.currentSession) return 0;
-    
-    const bpm = this.currentSession.bpm;
-    const beatsPerBar = this.currentSession.timeSignature[0];
-    const secondsPerBeat = 60 / bpm;
-    
-    return this.countInBars * beatsPerBar * secondsPerBeat;
-  }
-
-  private generateSessionId(): string {
-    return `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-  }
-
-  private emitRecordingEvent(eventType: string, data: any): void {
-    window.dispatchEvent(new CustomEvent('recordingEvent', {
-      detail: {
-        type: eventType,
-        data,
-        timestamp: Date.now()
-      }
-    }));
-  }
-
-  // Public getters and setters
-  isRecording_(): boolean {
-    return this.isRecording;
-  }
-
-  isCountingIn_(): boolean {
-    return this.isCountingIn;
-  }
-
-  getCurrentSession(): RecordingSession | undefined {
-    return this.currentSession;
-  }
-
-  getRecordedEvents(): RecordingEvent[] {
-    return [...this.recordedEvents];
-  }
-
-  setMetronomeEnabled(enabled: boolean): void {
-    this.metronomeEnabled = enabled;
-  }
-
-  getMetronomeEnabled(): boolean {
-    return this.metronomeEnabled;
-  }
-
-  setCountInBars(bars: number): void {
-    this.countInBars = Math.max(0, Math.min(8, bars));
-  }
-
-  getCountInBars(): number {
-    return this.countInBars;
-  }
-
-  getRecordingDuration(): number {
-    if (!this.isRecording || !this.recordingStartTime) return 0;
-    
-    const currentTime = this.audioContext?.currentTime || Date.now() / 1000;
-    return currentTime - this.recordingStartTime;
-  }
-
-  clearCurrentSession(): void {
-    if (!this.isRecording) {
-      this.currentSession = undefined;
-      this.recordedEvents = [];
+  // Cleanup
+  dispose(): void {
+    if (this.animationFrame) {
+      cancelAnimationFrame(this.animationFrame);
     }
-  }
-
-  exportSession(session: RecordingSession): string {
-    return JSON.stringify(session, null, 2);
-  }
-
-  importSession(sessionData: string): RecordingSession {
-    return JSON.parse(sessionData);
+    
+    if (this.mediaStream) {
+      this.mediaStream.getTracks().forEach(track => track.stop());
+    }
+    
+    if (this.audioContext) {
+      this.audioContext.close();
+    }
   }
 }
+
+export const recordingService = new RecordingService();
