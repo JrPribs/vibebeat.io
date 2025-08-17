@@ -9,8 +9,9 @@ import type { AudioContextState, AudioError, PerformanceMetrics } from '../share
 export const useAudioService = () => {
   const { state, actions, dispatch } = useStore();
   const initRef = useRef(false);
+  const userInteractionRef = useRef(false);
 
-  // Initialize audio service on first render
+  // Initialize audio service only after user interaction
   useEffect(() => {
     if (initRef.current) return;
     initRef.current = true;
@@ -20,9 +21,11 @@ export const useAudioService = () => {
         actions.setLoading(true);
         await audioService.initialize(state.audio.latencyMode);
         actions.setLoading(false);
+        userInteractionRef.current = true;
       } catch (error) {
         console.error('Failed to initialize audio service:', error);
-        actions.setError('Failed to initialize audio system');
+        const errorMessage = error instanceof Error ? error.message : 'Unknown audio error';
+        actions.setError(`Failed to initialize audio system: ${errorMessage}. Please click "Enable Audio" to try again.`);
         actions.setLoading(false);
       }
     };
@@ -43,15 +46,19 @@ export const useAudioService = () => {
       });
     });
 
-    // Initialize audio on user interaction
+    // Initialize audio ONLY on user interaction
     const handleUserInteraction = () => {
-      initializeAudio();
+      if (!userInteractionRef.current) {
+        initializeAudio();
+      }
       document.removeEventListener('click', handleUserInteraction);
       document.removeEventListener('keydown', handleUserInteraction);
+      document.removeEventListener('touchstart', handleUserInteraction);
     };
 
     document.addEventListener('click', handleUserInteraction);
     document.addEventListener('keydown', handleUserInteraction);
+    document.addEventListener('touchstart', handleUserInteraction);
 
     return () => {
       unsubscribeStateChange();
@@ -59,6 +66,7 @@ export const useAudioService = () => {
       unsubscribeLatency();
       document.removeEventListener('click', handleUserInteraction);
       document.removeEventListener('keydown', handleUserInteraction);
+      document.removeEventListener('touchstart', handleUserInteraction);
     };
   }, [actions, state.audio.latencyMode]);
 
@@ -113,18 +121,34 @@ export const useAudioService = () => {
     return audioService.getAnalyser();
   }, []);
 
+  // Manual audio initialization function
+  const initializeAudioManually = useCallback(async () => {
+    if (userInteractionRef.current) return; // Already initialized
+    
+    try {
+      actions.setLoading(true);
+      await audioService.initialize(state.audio.latencyMode);
+      actions.setLoading(false);
+      userInteractionRef.current = true;
+    } catch (error) {
+      console.error('Failed to initialize audio service manually:', error);
+      actions.setError('Failed to initialize audio system. Check if your browser supports Web Audio API.');
+      actions.setLoading(false);
+    }
+  }, [actions, state.audio.latencyMode]);
+
   return {
     audioService,
     audioState: state.audio,
     resumeAudio,
     suspendAudio,
+    initializeAudioManually,
     getPerformanceMetrics,
     getAudioContext,
     getDestination,
     getAnalyser,
     isInitialized: state.audio.context !== null,
+    hasUserInteracted: userInteractionRef.current,
     latencyMs: Math.round(state.audio.outputLatency * 1000)
   };
 };
-
-export default useAudioService;

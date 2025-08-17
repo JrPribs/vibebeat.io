@@ -34,13 +34,19 @@ class AudioService {
     try {
       this.latencyMode = latencyMode;
       
+      // Check for AudioContext support
+      if (typeof AudioContext === 'undefined' && typeof (window as any).webkitAudioContext === 'undefined') {
+        throw new Error('Web Audio API is not supported in this browser');
+      }
+      
       // Create AudioContext with latency-optimized settings
       const contextOptions: AudioContextOptions = {
         latencyHint: latencyMode === 'low' ? 'interactive' : 'balanced',
         sampleRate: 44100 // Standard sample rate for compatibility
       };
 
-      this.context = new AudioContext(contextOptions);
+      const AudioContextClass = AudioContext || (window as any).webkitAudioContext;
+      this.context = new AudioContextClass(contextOptions);
       this.destination = this.context.destination;
       
       // Create analyser for performance monitoring
@@ -74,7 +80,7 @@ class AudioService {
     } catch (error) {
       const audioError: AudioError = {
         code: 'CONTEXT_FAILED',
-        message: 'Failed to initialize AudioContext',
+        message: 'Failed to initialize AudioContext: ' + (error as Error).message,
         details: error
       };
       this.notifyError(audioError);

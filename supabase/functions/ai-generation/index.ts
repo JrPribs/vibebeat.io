@@ -4,16 +4,39 @@
  */
 
 Deno.serve(async (req) => {
+    // Get the origin from the request
+    const origin = req.headers.get('origin') || '';
+    
+    // Define allowed origins
+    const allowedOrigins = [
+        'https://qkjrwb29cgkh.space.minimax.io',
+        'http://localhost:3000',
+        'http://localhost:5173',
+        'https://localhost:3000',
+        'https://localhost:5173'
+    ];
+    
+    // Determine if origin is allowed
+    const isAllowedOrigin = allowedOrigins.includes(origin);
+    
     const corsHeaders = {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+        'Access-Control-Allow-Origin': isAllowedOrigin ? origin : 'https://qkjrwb29cgkh.space.minimax.io',
+        'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-requested-with',
         'Access-Control-Allow-Methods': 'POST, GET, OPTIONS, PUT, DELETE, PATCH',
         'Access-Control-Max-Age': '86400',
-        'Access-Control-Allow-Credentials': 'false'
+        'Access-Control-Allow-Credentials': 'true',
+        'Vary': 'Origin'
     };
 
+    // Handle preflight OPTIONS request
     if (req.method === 'OPTIONS') {
-        return new Response(null, { status: 200, headers: corsHeaders });
+        return new Response('OK', { 
+            status: 200, 
+            headers: {
+                ...corsHeaders,
+                'Content-Length': '2'
+            }
+        });
     }
 
     try {
@@ -285,18 +308,19 @@ function validateAndRepairMelody(data: any, input: any): any {
             repairs.push('fixed note step');
         }
         
-        if (!note.pitch || typeof note.pitch !== 'string' || !/^[A-G][#b]?[0-8]$/.test(note.pitch)) {
-            note.pitch = 'C4';
+        if (!note.pitch || typeof note.pitch !== 'string' ||
+            !/^[A-G][b#]?[0-9]$/.test(note.pitch)) {
+            note.pitch = 'C4'; // Default fallback
             repairs.push('fixed note pitch');
         }
         
         if (typeof note.durSteps !== 'number' || note.durSteps < 1) {
-            note.durSteps = Math.max(1, Math.round(note.durSteps || 4));
+            note.durSteps = 4; // Default quarter note
             repairs.push('fixed note duration');
         }
         
         if (typeof note.vel !== 'number' || note.vel < 1 || note.vel > 127) {
-            note.vel = Math.max(1, Math.min(127, Math.round(note.vel || 80)));
+            note.vel = Math.max(1, Math.min(127, Math.round(note.vel || 100)));
             repairs.push('fixed note velocity');
         }
         
