@@ -4,6 +4,9 @@
 import React from 'react';
 import { LucideIcon } from 'lucide-react';
 
+// Export AudioProvider
+export { AudioProvider, useAudioContext } from './AudioProvider';
+
 // Button Component
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'secondary' | 'danger';
