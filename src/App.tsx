@@ -1,12 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { StoreProvider, useProject } from './core/index';
+import { StoreProvider, useProject, useStore } from './core/index';
 import { Header } from './shared/ui/Header';
 import { Nav } from './shared/ui/Nav';
 import { MainContent } from './shared/ui/MainContent';
 import { AudioProvider } from './shared/ui/AudioProvider';
+import { OnboardingManager } from './features/onboarding/index';
+import { HelpModal, useHotkeys } from './features/help/index';
+import { AudioErrorBoundary, ErrorBoundary } from './components/ErrorBoundary';
 
 const AppContent: React.FC = () => {
   const project = useProject();
+  const { actions, state } = useStore();
+  const { showHelp } = state.ui;
+  
+  // Initialize global hotkeys
+  useHotkeys();
 
   const handleExportClick = () => {
     console.log('Export clicked - modal will be implemented');
@@ -36,17 +44,27 @@ const AppContent: React.FC = () => {
         <Nav />
         <MainContent />
       </div>
+      
+      {/* Phase 9: Onboarding System */}
+      <OnboardingManager />
+      
+      {/* Phase 9: Help System */}
+      {showHelp && <HelpModal onClose={() => actions.toggleHelp()} />}
     </div>
   );
 };
 
 function App() {
   return (
-    <StoreProvider>
-      <AudioProvider>
-        <AppContent />
-      </AudioProvider>
-    </StoreProvider>
+    <ErrorBoundary>
+      <StoreProvider>
+        <AudioErrorBoundary>
+          <AudioProvider>
+            <AppContent />
+          </AudioProvider>
+        </AudioErrorBoundary>
+      </StoreProvider>
+    </ErrorBoundary>
   );
 }
 
