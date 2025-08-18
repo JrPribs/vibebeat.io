@@ -1,258 +1,410 @@
-import { AudioProvider } from './audio-engine';
-import { Pattern, PatternStep } from '../shared/models';
+// Scheduler Service
+// Manages AudioWorklet scheduler for sample-accurate timing and metronome
 
-export interface SchedulerConfig {
-  bpm: number;
-  timeSignature: [number, number];
-  swing: number;
-  quantize: boolean;
+import type { ScheduledEvent, TransportState } from '../shared/models/index';
+import { audioService } from './audio-service';
+
+interface SchedulerPosition {
+  bar: number;
+  beat: number;
+  step: number;
+  time: number;
 }
 
-export class SchedulerService {
-  private audioProvider: AudioProvider;
-  private isPlaying = false;
-  private isPaused = false;
-  private currentStep = 0;
-  private pattern?: Pattern;
-  private bpm = 120;
-  private timeSignature: [number, number] = [4, 4];
-  private swing = 0;
-  private quantize = true;
-  private schedulerInterval?: number;
-  private lookAhead = 25.0; // ms
-  private scheduleAheadTime = 0.1; // seconds
-  private nextNoteTime = 0.0;
-  private stepLength = 0.0;
-  private currentBeatInBar = 0;
+interface SchedulerEvent extends ScheduledEvent {
+  scheduledTime?: number;
+  absoluteStep?: number;
+  actualTime?: number;
+  latency?: number;
+}
 
-  constructor(audioProvider: AudioProvider) {
-    this.audioProvider = audioProvider;
-    this.calculateStepLength();
+class SchedulerService {
+  private workletNode: AudioWorkletNode | null = null;
+  private isInitialized: boolean = false;
+  private currentPosition: SchedulerPosition = { bar: 0, beat: 0, step: 0, time: 0 };
+  private isPlaying: boolean = false;
+  private metronomeNode: GainNode | null = null;
+  private metronomeOscillator: OscillatorNode | null = null;
+  
+  // Event listeners
+  private positionListeners: ((position: SchedulerPosition) => void)[] = [];
+  private eventListeners: ((event: SchedulerEvent) => void)[] = [];
+  private stepListeners: ((step: number, beat: number, bar: number, time: number) => void)[] = [];
+  private transportListeners: ((state: { isPlaying: boolean; isCountingIn?: boolean }) => void)[] = [];
+
+  constructor() {
+    this.handleWorkletMessage = this.handleWorkletMessage.bind(this);
   }
 
-  start(pattern: Pattern, bpm?: number): void {
-    if (bpm) {
-      this.bpm = bpm;
-      this.calculateStepLength();
+  /**
+   * Initialize the scheduler with AudioWorklet
+   */
+  async initialize(): Promise<void> {
+    const context = audioService.getState().context;
+    if (!context) {
+      throw new Error('AudioContext not available. Please enable audio first.');
     }
-    
-    this.pattern = pattern;
-    this.isPlaying = true;
-    this.isPaused = false;
-    this.currentStep = 0;
-    this.currentBeatInBar = 0;
-    
-    const audioContext = this.audioProvider.getAudioContext();
-    if (audioContext) {
-      this.nextNoteTime = audioContext.currentTime;
-      this.schedule();
-    }
-  }
 
-  stop(): void {
-    this.isPlaying = false;
-    this.isPaused = false;
-    this.currentStep = 0;
-    this.currentBeatInBar = 0;
-    
-    if (this.schedulerInterval) {
-      clearTimeout(this.schedulerInterval);
-      this.schedulerInterval = undefined;
-    }
-  }
-
-  pause(): void {
-    if (this.isPlaying) {
-      this.isPaused = true;
-      this.isPlaying = false;
+    try {
+      // Load the AudioWorklet module
+      await context.audioWorklet.addModule('/audio-worklet-scheduler');
       
-      if (this.schedulerInterval) {
-        clearTimeout(this.schedulerInterval);
-        this.schedulerInterval = undefined;
-      }
-    }
-  }
-
-  resume(): void {
-    if (this.isPaused) {
-      this.isPaused = false;
-      this.isPlaying = true;
+      // Create the worklet node
+      this.workletNode = new AudioWorkletNode(context, 'scheduler-processor');
       
-      const audioContext = this.audioProvider.getAudioContext();
-      if (audioContext) {
-        this.nextNoteTime = audioContext.currentTime;
-        this.schedule();
+      // Set up message handling
+      this.workletNode.port.onmessage = this.handleWorkletMessage;
+      
+      // Connect to destination (though it doesn't output audio directly)
+      this.workletNode.connect(context.destination);
+      
+      // Set up metronome audio chain
+      this.setupMetronome();
+      
+      this.isInitialized = true;
+      
+      console.log('SchedulerService initialized with AudioWorklet');
+      
+    } catch (error) {
+      console.error('Failed to initialize SchedulerService:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Set up metronome audio nodes
+   */
+  private setupMetronome(): void {
+    const context = audioService.getState().context;
+    if (!context) return;
+
+    // Create metronome gain node
+    this.metronomeNode = context.createGain();
+    this.metronomeNode.gain.setValueAtTime(0.5, context.currentTime);
+    this.metronomeNode.connect(context.destination);
+  }
+
+  /**
+   * Handle messages from the AudioWorklet
+   */
+  private handleWorkletMessage(event: MessageEvent): void {
+    const { type, ...data } = event.data;
+
+    switch (type) {
+      case 'ready':
+        console.log('AudioWorklet scheduler ready');
+        break;
+
+      case 'positionUpdate':
+        this.currentPosition = data.position;
+        this.positionListeners.forEach(listener => listener(data.position));
+        break;
+
+      case 'triggerEvent':
+        this.eventListeners.forEach(listener => listener(data.event));
+        break;
+
+      case 'stepTrigger':
+        this.stepListeners.forEach(listener => 
+          listener(data.step, data.beat, data.bar, data.time)
+        );
+        break;
+
+      case 'started':
+        this.isPlaying = true;
+        this.transportListeners.forEach(listener => 
+          listener({ isPlaying: true, isCountingIn: data.countingIn })
+        );
+        break;
+
+      case 'stopped':
+      case 'paused':
+        this.isPlaying = false;
+        this.transportListeners.forEach(listener => 
+          listener({ isPlaying: false })
+        );
+        break;
+
+      case 'countInComplete':
+        this.transportListeners.forEach(listener => 
+          listener({ isPlaying: true, isCountingIn: false })
+        );
+        break;
+
+      default:
+        console.warn('Unknown worklet message type:', type);
+    }
+  }
+
+  /**
+   * Start playback with optional count-in
+   */
+  async start(options?: { countIn?: boolean; countInBars?: number }): Promise<void> {
+    if (!this.isInitialized || !this.workletNode) {
+      throw new Error('Scheduler not initialized');
+    }
+
+    // Ensure audio context is running
+    await audioService.resume();
+
+    // Send start message to worklet
+    this.workletNode.port.postMessage({
+      type: 'start',
+      data: {
+        countIn: options?.countIn || false,
+        countInBars: options?.countInBars || 1
       }
-    }
-  }
-
-  private schedule(): void {
-    const audioContext = this.audioProvider.getAudioContext();
-    if (!audioContext || !this.pattern) return;
-
-    while (this.nextNoteTime < audioContext.currentTime + this.scheduleAheadTime) {
-      this.scheduleStep(this.nextNoteTime);
-      this.nextStep();
-    }
-
-    if (this.isPlaying) {
-      this.schedulerInterval = window.setTimeout(
-        () => this.schedule(),
-        this.lookAhead
-      );
-    }
-  }
-
-  private scheduleStep(time: number): void {
-    if (!this.pattern) return;
-
-    // Get the current step data
-    const step = this.pattern.steps[this.currentStep];
-    if (step && step.active) {
-      // Schedule each track in the step
-      step.tracks.forEach((track, trackIndex) => {
-        if (track.enabled && track.velocity > 0) {
-          this.scheduleNote(time, trackIndex, track.velocity, step);
-        }
-      });
-    }
-
-    // Emit step event for UI updates
-    this.emitStepEvent(this.currentStep, time);
-  }
-
-  private scheduleNote(time: number, trackIndex: number, velocity: number, step: PatternStep): void {
-    // Apply swing to the timing
-    let adjustedTime = time;
-    if (this.swing > 0 && this.currentStep % 2 === 1) {
-      const swingDelay = (this.stepLength * this.swing) / 100;
-      adjustedTime += swingDelay;
-    }
-
-    // Emit note event for the audio service to handle
-    this.emitNoteEvent({
-      trackIndex,
-      velocity,
-      time: adjustedTime,
-      step: this.currentStep,
-      stepData: step
     });
   }
 
-  private nextStep(): void {
-    const stepsPerBeat = 4; // Assuming 16th note resolution
-    const beatsPerBar = this.timeSignature[0];
-    const stepsPerBar = stepsPerBeat * beatsPerBar;
+  /**
+   * Stop playback
+   */
+  stop(): void {
+    if (!this.workletNode) return;
 
-    this.currentStep++;
-    this.currentBeatInBar = Math.floor(this.currentStep / stepsPerBeat);
+    this.workletNode.port.postMessage({ type: 'stop' });
+    this.stopMetronome();
+  }
 
-    if (this.pattern && this.currentStep >= this.pattern.steps.length) {
-      this.currentStep = 0;
-      this.currentBeatInBar = 0;
+  /**
+   * Pause playback
+   */
+  pause(): void {
+    if (!this.workletNode) return;
+
+    this.workletNode.port.postMessage({ type: 'pause' });
+    this.stopMetronome();
+  }
+
+  /**
+   * Set BPM
+   */
+  setBPM(bpm: number): void {
+    if (!this.workletNode) return;
+
+    this.workletNode.port.postMessage({
+      type: 'setBPM',
+      bpm: Math.max(60, Math.min(200, bpm))
+    });
+  }
+
+  /**
+   * Set swing percentage
+   */
+  setSwing(swingPercent: number): void {
+    if (!this.workletNode) return;
+
+    this.workletNode.port.postMessage({
+      type: 'setSwing',
+      swingPercent: Math.max(0, Math.min(60, swingPercent))
+    });
+  }
+
+  /**
+   * Set time signature
+   */
+  setTimeSignature(timeSignature: [number, number]): void {
+    if (!this.workletNode) return;
+
+    this.workletNode.port.postMessage({
+      type: 'setTimeSignature',
+      timeSignature
+    });
+  }
+
+  /**
+   * Enable/disable metronome
+   */
+  setMetronome(enabled: boolean): void {
+    if (!this.workletNode) return;
+
+    this.workletNode.port.postMessage({
+      type: 'setMetronome',
+      enabled
+    });
+
+    if (enabled && this.isPlaying) {
+      this.startMetronome();
+    } else {
+      this.stopMetronome();
     }
-
-    this.nextNoteTime += this.stepLength;
   }
 
-  private calculateStepLength(): void {
-    // Calculate the length of one step in seconds
-    // Assuming 16th note resolution (4 steps per quarter note)
-    const quarterNoteLength = 60 / this.bpm;
-    this.stepLength = quarterNoteLength / 4;
+  /**
+   * Schedule an event (pad hit, note, etc.)
+   */
+  scheduleEvent(event: ScheduledEvent): void {
+    if (!this.workletNode) return;
+
+    this.workletNode.port.postMessage({
+      type: 'scheduleEvent',
+      event
+    });
   }
 
-  private emitStepEvent(step: number, time: number): void {
-    window.dispatchEvent(new CustomEvent('schedulerStep', {
-      detail: {
-        step,
-        time,
-        currentBeatInBar: this.currentBeatInBar,
-        isPlaying: this.isPlaying
+  /**
+   * Clear all scheduled events
+   */
+  clearEvents(): void {
+    if (!this.workletNode) return;
+
+    this.workletNode.port.postMessage({ type: 'clearEvents' });
+  }
+
+  /**
+   * Set playback position
+   */
+  setPosition(position: Partial<SchedulerPosition>): void {
+    if (!this.workletNode) return;
+
+    this.workletNode.port.postMessage({
+      type: 'setPosition',
+      position: {
+        bar: position.bar || 0,
+        beat: position.beat || 0,
+        step: position.step || 0
       }
-    }));
+    });
   }
 
-  private emitNoteEvent(event: {
-    trackIndex: number;
-    velocity: number;
-    time: number;
-    step: number;
-    stepData: PatternStep;
-  }): void {
-    window.dispatchEvent(new CustomEvent('schedulerNote', {
-      detail: event
-    }));
+  /**
+   * Start metronome audio output
+   */
+  private startMetronome(): void {
+    // The metronome audio is actually generated in the main thread
+    // based on step triggers from the worklet
   }
 
-  // Public getters and setters
-  isPlaying_(): boolean {
-    return this.isPlaying;
+  /**
+   * Stop metronome audio output
+   */
+  private stopMetronome(): void {
+    if (this.metronomeOscillator) {
+      this.metronomeOscillator.stop();
+      this.metronomeOscillator = null;
+    }
   }
 
-  getCurrentStep(): number {
-    return this.currentStep;
-  }
+  /**
+   * Trigger a metronome click
+   */
+  triggerMetronomeClick(isAccent: boolean = false): void {
+    const context = audioService.getState().context;
+    if (!context || !this.metronomeNode) return;
 
-  getBpm(): number {
-    return this.bpm;
-  }
-
-  setBpm(bpm: number): void {
-    this.bpm = Math.max(60, Math.min(200, bpm));
-    this.calculateStepLength();
-  }
-
-  getTimeSignature(): [number, number] {
-    return this.timeSignature;
-  }
-
-  setTimeSignature(numerator: number, denominator: number): void {
-    this.timeSignature = [numerator, denominator];
-    this.calculateStepLength();
-  }
-
-  getSwing(): number {
-    return this.swing;
-  }
-
-  setSwing(swing: number): void {
-    this.swing = Math.max(0, Math.min(100, swing));
-  }
-
-  getQuantize(): boolean {
-    return this.quantize;
-  }
-
-  setQuantize(enabled: boolean): void {
-    this.quantize = enabled;
-  }
-
-  getPattern(): Pattern | undefined {
-    return this.pattern;
-  }
-
-  getCurrentBeatInBar(): number {
-    return this.currentBeatInBar;
-  }
-
-  getPlaybackPosition(): number {
-    const audioContext = this.audioProvider.getAudioContext();
-    if (!audioContext || !this.isPlaying) return 0;
-    
-    const elapsed = audioContext.currentTime - (this.nextNoteTime - this.stepLength * this.currentStep);
-    return elapsed;
-  }
-
-  setCurrentStep(step: number): void {
-    if (this.pattern && step >= 0 && step < this.pattern.steps.length) {
-      this.currentStep = step;
-      this.currentBeatInBar = Math.floor(this.currentStep / 4);
+    try {
+      // Create short click sound
+      const oscillator = context.createOscillator();
+      const envelope = context.createGain();
       
-      const audioContext = this.audioProvider.getAudioContext();
-      if (audioContext && this.isPlaying) {
-        this.nextNoteTime = audioContext.currentTime;
-      }
+      oscillator.frequency.setValueAtTime(
+        isAccent ? 1000 : 800, // Higher pitch for accent
+        context.currentTime
+      );
+      
+      // Quick attack and decay
+      envelope.gain.setValueAtTime(0, context.currentTime);
+      envelope.gain.linearRampToValueAtTime(
+        isAccent ? 0.8 : 0.5,
+        context.currentTime + 0.001
+      );
+      envelope.gain.exponentialRampToValueAtTime(
+        0.001,
+        context.currentTime + 0.05
+      );
+      
+      oscillator.connect(envelope);
+      envelope.connect(this.metronomeNode);
+      
+      oscillator.start(context.currentTime);
+      oscillator.stop(context.currentTime + 0.05);
+      
+    } catch (error) {
+      console.error('Failed to trigger metronome click:', error);
     }
+  }
+
+  /**
+   * Get current playback position
+   */
+  getPosition(): SchedulerPosition {
+    return { ...this.currentPosition };
+  }
+
+  /**
+   * Get current playback state
+   */
+  getState(): { isPlaying: boolean; isInitialized: boolean } {
+    return {
+      isPlaying: this.isPlaying,
+      isInitialized: this.isInitialized
+    };
+  }
+
+  // Event listener management
+  onPositionUpdate(listener: (position: SchedulerPosition) => void): () => void {
+    this.positionListeners.push(listener);
+    return () => {
+      const index = this.positionListeners.indexOf(listener);
+      if (index > -1) this.positionListeners.splice(index, 1);
+    };
+  }
+
+  onEvent(listener: (event: SchedulerEvent) => void): () => void {
+    this.eventListeners.push(listener);
+    return () => {
+      const index = this.eventListeners.indexOf(listener);
+      if (index > -1) this.eventListeners.splice(index, 1);
+    };
+  }
+
+  onStep(listener: (step: number, beat: number, bar: number, time: number) => void): () => void {
+    this.stepListeners.push(listener);
+    return () => {
+      const index = this.stepListeners.indexOf(listener);
+      if (index > -1) this.stepListeners.splice(index, 1);
+    };
+  }
+
+  onTransportChange(listener: (state: { isPlaying: boolean; isCountingIn?: boolean }) => void): () => void {
+    this.transportListeners.push(listener);
+    return () => {
+      const index = this.transportListeners.indexOf(listener);
+      if (index > -1) this.transportListeners.splice(index, 1);
+    };
+  }
+
+  /**
+   * Destroy the scheduler and clean up resources
+   */
+  async destroy(): Promise<void> {
+    this.stop();
+    
+    if (this.workletNode) {
+      this.workletNode.disconnect();
+      this.workletNode = null;
+    }
+    
+    if (this.metronomeNode) {
+      this.metronomeNode.disconnect();
+      this.metronomeNode = null;
+    }
+    
+    this.isInitialized = false;
+  }
+
+  // Singleton pattern
+  private static instance: SchedulerService | null = null;
+  
+  static getInstance(): SchedulerService {
+    if (!SchedulerService.instance) {
+      SchedulerService.instance = new SchedulerService();
+    }
+    return SchedulerService.instance;
   }
 }
+
+// Export singleton instance
+export const schedulerService = SchedulerService.getInstance();
+export default schedulerService;
