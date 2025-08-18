@@ -11,7 +11,7 @@ import type { PadName } from '../../shared/models/index.js';
 
 export const PadsView: React.FC = () => {
   const { actions } = useStore();
-  const { triggerPad, hasPadSample, activeVoices, currentKit } = usePadTrigger();
+  const { triggerPad, hasPadSample, activeVoices, currentKit, setKit } = usePadTrigger();
   const { isPlaying, currentPosition } = useScheduler();
   const { audioState } = useAudioService();
   
@@ -279,7 +279,7 @@ export const PadsView: React.FC = () => {
           </div>
           <div>
             <span className="text-gray-400">Active Voices:</span>
-            <span className="text-vibe-purple ml-2 font-medium">{activeVoices}</span>
+            <span className="text-vibe-purple ml-2 font-medium">{activeVoices.size}</span>
           </div>
           <div className="flex items-center space-x-2">
             <span className="text-gray-400">Keyboard:</span>
@@ -301,7 +301,10 @@ export const PadsView: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Kit Selector */}
         <div className="lg:col-span-1">
-          <KitSelector />
+          <KitSelector 
+            selectedKit={currentKit}
+            onKitChange={setKit}
+          />
         </div>
         
         {/* Enhanced Pad Grid */}
@@ -367,12 +370,21 @@ export const PadsView: React.FC = () => {
       
       {/* Step Sequencer */}
       <div className="mt-6">
-        <StepSequencer />
+        <StepSequencer 
+          steps={[]}
+          currentStep={0}
+          onStepToggle={(step, pad) => console.log('Step toggle:', step, pad)}
+        />
       </div>
       
       {/* Swing & Quantize Controls */}
       <div className="mt-6">
-        <SwingQuantizeControls />
+        <SwingQuantizeControls 
+          swing={0}
+          quantize={100}
+          onSwingChange={(value) => console.log('Swing change:', value)}
+          onQuantizeChange={(value) => console.log('Quantize change:', value)}
+        />
       </div>
       
       {/* AI Beat Generation */}

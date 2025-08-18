@@ -108,10 +108,7 @@ class PadTriggerService {
         if (event.type === 'pad' && event.data.padName) {
           this.triggerPad(
             event.data.padName as PadName,
-            {
-              velocity: event.data.velocity || 100,
-              time: event.actualTime
-            }
+            event.data.velocity || 100
           );
         }
       });
@@ -142,7 +139,7 @@ class PadTriggerService {
       
       // Update pad samples mapping
       for (const [padName, sample] of samples.entries()) {
-        this.padSamples.set(padName, sample);
+        this.padSamples.set(padName as PadName, sample);
       }
       
       console.log(`Loaded ${samples.size} pad samples for kit: ${kitId}`);
@@ -154,9 +151,26 @@ class PadTriggerService {
   }
 
   /**
+   * Add event listener for pad triggers
+   */
+  onEvent(listener: (event: { type: string; padName: PadName; velocity: number }) => void): () => void {
+    const wrappedListener = (padName: PadName, velocity: number) => {
+      listener({ type: 'pad_triggered', padName, velocity });
+    };
+    this.padTriggerListeners.push(wrappedListener);
+    
+    return () => {
+      const index = this.padTriggerListeners.indexOf(wrappedListener);
+      if (index >= 0) {
+        this.padTriggerListeners.splice(index, 1);
+      }
+    };
+  }
+
+  /**
    * Trigger a drum pad manually or programmatically
    */
-  triggerPad(padName: PadName, options: PadTriggerOptions = {}): void {
+  triggerPad(padName: PadName, velocity: number = 127): void {
     const context = audioService.getState().context;
     if (!context) {
       console.warn('AudioContext not available. Please enable audio to play sounds.');
@@ -169,12 +183,9 @@ class PadTriggerService {
       return;
     }
 
-    const {
-      velocity = 100,
-      time = context.currentTime,
-      gain = 1.0,
-      pan = 0
-    } = options;
+    const time = context.currentTime;
+    const gain = 1.0;
+    const pan = 0;
 
     try {
       // Create audio buffer source
@@ -229,6 +240,20 @@ class PadTriggerService {
     } catch (error) {
       console.error('Failed to trigger pad:', error);
     }
+  }
+
+  /**
+   * Check if a pad has a loaded sample
+   */
+  hasPadSample(padName: PadName): boolean {
+    return this.padSamples.has(padName);
+  }
+
+  /**
+   * Get active voice information
+   */
+  get activeVoices(): Map<string, AudioBufferSourceNode> {
+    return this.playbackState.activeVoices;
   }
 
   /**
@@ -396,13 +421,6 @@ class PadTriggerService {
    */
   getPadSamples(): Map<PadName, Sample> {
     return new Map(this.padSamples);
-  }
-
-  /**
-   * Check if a pad has a loaded sample
-   */
-  hasPadSample(padName: PadName): boolean {
-    return this.padSamples.has(padName);
   }
 
   // Event listener management

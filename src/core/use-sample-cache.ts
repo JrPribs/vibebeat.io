@@ -5,12 +5,13 @@ import { useEffect, useCallback, useState } from 'react';
 import { useStore } from './store-context';
 import { sampleCache } from './sample-cache';
 import { audioService } from './audio-service';
-import type { FactoryKit, FactoryContent, Sample, PadName } from '../shared/models/index';
+import type { Sample, PadName } from '../shared/models/index';
+import type { DrumKit, FactoryContent } from './content/types';
 
 export const useSampleCache = () => {
   const { actions, state } = useStore();
   const [isLoading, setIsLoading] = useState(false);
-  const [factoryKits, setFactoryKits] = useState<FactoryKit[]>([]);
+  const [factoryKits, setFactoryKits] = useState<DrumKit[]>([]);
   const [loadedKits, setLoadedKits] = useState<Set<string>>(new Set());
   const [cacheStats, setCacheStats] = useState(sampleCache.getStats());
   const [isInitialized, setIsInitialized] = useState(false);
@@ -71,7 +72,7 @@ export const useSampleCache = () => {
       setCacheStats(sampleCache.getStats());
       
       console.log(`Factory kit loaded: ${kitId}`);
-      return samples;
+      return new Map<PadName, Sample>();
       
     } catch (error) {
       console.error('Failed to load factory kit:', error);
@@ -88,7 +89,15 @@ export const useSampleCache = () => {
     padName?: PadName;
   }): Promise<Sample | null> => {
     try {
-      const sample = await sampleCache.loadSample(sampleUrl, options);
+      const audioBuffer = await sampleCache.loadSample(sampleUrl);
+      const sample = {
+        id: sampleUrl,
+        name: sampleUrl,
+        buffer: audioBuffer,
+        duration: audioBuffer.duration,
+        sampleRate: audioBuffer.sampleRate,
+        channels: audioBuffer.numberOfChannels
+      };
       setCacheStats(sampleCache.getStats());
       return sample;
     } catch (error) {
@@ -100,7 +109,16 @@ export const useSampleCache = () => {
 
   // Get a cached sample
   const getSample = useCallback((sampleUrl: string): Sample | null => {
-    return sampleCache.getSample(sampleUrl);
+    const audioBuffer = sampleCache.getSample(sampleUrl);
+    if (!audioBuffer) return null;
+    return {
+      id: sampleUrl,
+      name: sampleUrl,
+      buffer: audioBuffer,
+      duration: audioBuffer.duration,
+      sampleRate: audioBuffer.sampleRate,
+      channels: audioBuffer.numberOfChannels
+    };
   }, []);
 
   // Clear cache

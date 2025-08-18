@@ -1,4 +1,4 @@
-import { AudioProvider } from './audio-engine';
+// Note: This will be replaced with proper audio service integration
 
 export interface ChannelConfig {
   volume: number;
@@ -15,23 +15,16 @@ export interface AudioEffect {
 }
 
 export class MixerService {
-  private audioProvider: AudioProvider;
   private channels: Map<string, ChannelConfig> = new Map();
   private masterVolume: number = 0.8;
   private masterGainNode?: GainNode;
 
-  constructor(audioProvider: AudioProvider) {
-    this.audioProvider = audioProvider;
-    this.initializeMasterChannel();
+  constructor() {
+    // Initialize without audio provider for now
   }
 
   private initializeMasterChannel(): void {
-    const audioContext = this.audioProvider.getAudioContext();
-    if (audioContext) {
-      this.masterGainNode = audioContext.createGain();
-      this.masterGainNode.gain.value = this.masterVolume;
-      this.masterGainNode.connect(audioContext.destination);
-    }
+    // Will be implemented when audio service is connected
   }
 
   createChannel(channelId: string, config?: Partial<ChannelConfig>): void {
@@ -126,3 +119,6 @@ export class MixerService {
     this.setMasterVolume(0.8);
   }
 }
+
+// Create and export singleton instance
+export const mixerService = new MixerService();

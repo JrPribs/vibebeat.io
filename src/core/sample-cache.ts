@@ -97,4 +97,57 @@ export class SampleCache {
       channels: buffer.numberOfChannels
     }));
   }
+
+  // Additional methods for factory kit support
+  async loadFactoryKit(kitId: string): Promise<Map<string, any>> {
+    // Placeholder implementation - return mock samples
+    console.log('Loading factory kit:', kitId);
+    return new Map();
+  }
+
+  getStats() {
+    return {
+      totalSamples: this.cache.size,
+      loadingCount: this.loading.size,
+      memoryUsage: 0 // Placeholder
+    };
+  }
+
+  getFactoryKits() {
+    return [
+      { 
+        id: 'factory-kit-01', 
+        name: 'Factory Kit 01',
+        samples: {
+          'KICK': '/assets/kits/factory-kit-01/kick.wav',
+          'SNARE': '/assets/kits/factory-kit-01/snare.wav',
+          'HIHAT_CLOSED': '/assets/kits/factory-kit-01/hihat.wav'
+        }
+      },
+      { 
+        id: 'factory-kit-02', 
+        name: 'Factory Kit 02',
+        samples: {
+          'KICK': '/assets/kits/factory-kit-02/kick.wav',
+          'SNARE': '/assets/kits/factory-kit-02/snare.wav',
+          'HIHAT_CLOSED': '/assets/kits/factory-kit-02/hihat.wav'
+        }
+      }
+    ];
+  }
+
+  async preloadEssentials(): Promise<void> {
+    // Placeholder implementation
+    console.log('Preloading essential samples');
+  }
+
+  getFactoryContent() {
+    return {
+      drumKits: this.getFactoryKits(),
+      instruments: []
+    };
+  }
 }
+
+// Create and export singleton instance
+export const sampleCache = new SampleCache();

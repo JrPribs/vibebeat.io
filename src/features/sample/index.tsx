@@ -35,8 +35,8 @@ export function SampleView(): JSX.Element {
     currentFile: null,
     audioBuffer: null,
     isLoading: false,
-    isPlaying: false,
-    playbackPosition: 0,
+    isProcessing: false,
+    error: null,
     trimStart: 0,
     trimEnd: 0,
     selectedRegion: null,
@@ -45,7 +45,9 @@ export function SampleView(): JSX.Element {
     pitchShift: 0,
     timeStretch: 1,
     waveformData: null,
-    fileInfo: null
+    fileInfo: null,
+    isPlaying: false,
+    playbackPosition: 0
   });
   
   const [user, setUser] = useState<any>(null);
@@ -86,6 +88,8 @@ export function SampleView(): JSX.Element {
           size: file.size,
           duration: 30, // Mock duration
           sampleRate: 44100,
+          channels: 2,
+          format: 'wav',
           detectedBPM: 120
         },
         trimEnd: 30,

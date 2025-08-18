@@ -353,7 +353,12 @@ export const KeysView: React.FC = () => {
       {/* AI Controls */}
       <div className="bg-gray-800 p-6 rounded-lg">
         <h3 className="text-lg font-semibold text-white mb-4">AI Assistant</h3>
-        <AIControls />
+        <AIControls 
+          view="keys"
+          onGenerate={(type, result) => {
+            console.log('AI generation result:', type, result);
+          }}
+        />
       </div>
     </div>
   );

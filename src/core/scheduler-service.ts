@@ -160,11 +160,23 @@ class SchedulerService {
   /**
    * Stop playback
    */
+  /**
+   * Start/play playback
+   */
+  play(): void {
+    if (!this.workletNode) return;
+    this.workletNode.port.postMessage({ type: 'start' });
+    this.isPlaying = true;
+    this.transportListeners.forEach(listener => listener({ isPlaying: true }));
+  }
+
   stop(): void {
     if (!this.workletNode) return;
 
     this.workletNode.port.postMessage({ type: 'stop' });
     this.stopMetronome();
+    this.isPlaying = false;
+    this.transportListeners.forEach(listener => listener({ isPlaying: false }));
   }
 
   /**
@@ -374,6 +386,7 @@ class SchedulerService {
       if (index > -1) this.transportListeners.splice(index, 1);
     };
   }
+
 
   /**
    * Destroy the scheduler and clean up resources

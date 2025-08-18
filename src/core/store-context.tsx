@@ -39,6 +39,7 @@ interface StoreContextType {
     setLatencyMode: (mode: 'low' | 'stable') => void;
     setLoading: (loading: boolean) => void;
     setError: (error: string | null) => void;
+    toggleHelp: () => void;
     
     // Undo/Redo
     undo: () => void;
@@ -203,6 +204,10 @@ export const StoreProvider: React.FC<StoreProviderProps> = ({
     });
   }, [enhancedDispatch]);
 
+  const toggleHelp = useCallback(() => {
+    enhancedDispatch({ type: 'TOGGLE_HELP' });
+  }, [enhancedDispatch]);
+
   const actions = {
     // Project
     setProject,
@@ -227,6 +232,7 @@ export const StoreProvider: React.FC<StoreProviderProps> = ({
     setLatencyMode,
     setLoading,
     setError,
+    toggleHelp,
     // Undo/Redo
     undo,
     redo,

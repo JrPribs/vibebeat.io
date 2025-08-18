@@ -26,6 +26,7 @@ export type AppAction =
   | { type: 'SET_SELECTION'; payload: Partial<SelectionState> }
   | { type: 'SET_UI'; payload: Partial<UIState> }
   | { type: 'SET_AUDIO'; payload: Partial<AudioContextState> }
+  | { type: 'TOGGLE_HELP' }
   | { type: 'UNDO' }
   | { type: 'REDO' }
   | { type: 'CLEAR_UNDO_HISTORY' };

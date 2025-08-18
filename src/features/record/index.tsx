@@ -120,11 +120,17 @@ export function RecordView(): JSX.Element {
     }));
     
     // Mock audio clip
-    const mockClip = {
+    const mockClip: AudioClip = {
       buffer: null as any,
       duration: recordingState.recordingTime,
       sampleRate: 44100,
-      startTime: Date.now() - (recordingState.recordingTime * 1000)
+      originalSampleRate: 44100,
+      startTime: Date.now() - (recordingState.recordingTime * 1000),
+      endTime: Date.now(),
+      metadata: {
+        barSync: options.barSync,
+        bpm: 120
+      }
     };
     
     setCurrentClip(mockClip);

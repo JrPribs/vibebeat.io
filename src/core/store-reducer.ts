@@ -46,7 +46,8 @@ export const createInitialState = (initialProject?: Project): AppState => {
       latencyMode: 'stable',
       sidebarCollapsed: false,
       loading: false,
-      error: null
+      error: null,
+      showHelp: false
     },
     audio: {
       context: null,
@@ -150,6 +151,15 @@ export const appStateReducer = (state: AppState, action: AppAction): AppState =>
         ui: {
           ...state.ui,
           ...action.payload
+        }
+      };
+    }
+    case 'TOGGLE_HELP': {
+      return {
+        ...state,
+        ui: {
+          ...state.ui,
+          showHelp: !state.ui.showHelp
         }
       };
     }

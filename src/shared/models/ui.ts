@@ -16,6 +16,7 @@ export interface UIState {
   sidebarCollapsed: boolean;
   loading: boolean;
   error: string | null;
+  showHelp: boolean;
 }
 
 // UI State Types

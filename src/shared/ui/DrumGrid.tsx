@@ -25,7 +25,7 @@ export const DrumGrid: React.FC = () => {
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-semibold text-white">Drum Pads</h3>
         <div className="text-sm text-gray-400">
-          Active Voices: <span className="text-vibe-blue font-medium">{activeVoices}</span>
+          Active Voices: <span className="text-vibe-blue font-medium">{activeVoices.size}</span>
         </div>
       </div>
       
