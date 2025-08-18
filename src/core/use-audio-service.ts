@@ -4,6 +4,7 @@
 import { useEffect, useCallback, useRef } from 'react';
 import { useStore } from './store-context';
 import { audioService } from './audio-service';
+import { schedulerService } from './scheduler-service';
 import type { AudioContextState, AudioError, PerformanceMetrics } from '../shared/models/index';
 
 export const useAudioService = () => {
@@ -19,7 +20,19 @@ export const useAudioService = () => {
     const initializeAudio = async () => {
       try {
         actions.setLoading(true);
+        
+        // Initialize AudioService first
         await audioService.initialize(state.audio.latencyMode);
+        
+        // Initialize SchedulerService after AudioService is ready
+        try {
+          await schedulerService.initialize();
+          console.log('Complete audio system initialized successfully');
+        } catch (schedulerError) {
+          console.error('Failed to initialize scheduler:', schedulerError);
+          // Audio still works without scheduler, but timing won't be sample-accurate
+        }
+        
         actions.setLoading(false);
         userInteractionRef.current = true;
       } catch (error) {
@@ -127,7 +140,19 @@ export const useAudioService = () => {
     
     try {
       actions.setLoading(true);
+      
+      // Initialize AudioService first
       await audioService.initialize(state.audio.latencyMode);
+      
+      // Initialize SchedulerService after AudioService is ready
+      try {
+        await schedulerService.initialize();
+        console.log('Complete audio system initialized successfully');
+      } catch (schedulerError) {
+        console.error('Failed to initialize scheduler:', schedulerError);
+        // Audio still works without scheduler, but timing won't be sample-accurate
+      }
+      
       actions.setLoading(false);
       userInteractionRef.current = true;
     } catch (error) {

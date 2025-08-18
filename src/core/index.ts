@@ -57,6 +57,11 @@ export {
   usePadTrigger
 } from './use-pad-trigger';
 
+// Piano Synthesis & Playback
+export {
+  pianoService
+} from './piano-service';
+
 // Mixer & Audio Processing
 export {
   mixerService

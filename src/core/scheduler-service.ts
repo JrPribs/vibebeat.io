@@ -47,7 +47,7 @@ class SchedulerService {
 
     try {
       // Load the AudioWorklet module
-      await context.audioWorklet.addModule('/audio-worklet-scheduler');
+      await context.audioWorklet.addModule('/audio-worklet-scheduler.js');
       
       // Create the worklet node
       this.workletNode = new AudioWorkletNode(context, 'scheduler-processor');

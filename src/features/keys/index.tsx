@@ -2,7 +2,7 @@
 // Piano keyboard interface with scale lock and recording capabilities
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { useStore, useScheduler, useAudioService } from '../../core/index.js';
+import { useStore, useScheduler, useAudioService, pianoService } from '../../core/index.js';
 import { AIControls } from '../../components/AIControls';
 
 interface Note {
@@ -141,8 +141,13 @@ export const KeysView: React.FC = () => {
       }
     }
     
-    // Play the note (integrate with audio engine)
-    console.log(`Playing note: ${notes.find(n => n.midiNumber === midiNumber)?.note} (${midiNumber}) velocity: ${velocity}`);
+    // Play the note with piano synthesis
+    const note = notes.find(n => n.midiNumber === midiNumber);
+    if (note) {
+      const noteWithOctave = `${note.note}${note.octave}`;
+      pianoService.triggerNote(noteWithOctave, velocity);
+      console.log(`Playing note: ${noteWithOctave} (${midiNumber}) velocity: ${velocity}`);
+    }
   }, [scaleLock, isNoteInScale, notes, isRecording, recordingStartTime]);
   
   // Handle note release
@@ -184,7 +189,13 @@ export const KeysView: React.FC = () => {
       });
     }
     
-    console.log(`Released note: ${notes.find(n => n.midiNumber === midiNumber)?.note}`);
+    // Release the note with piano synthesis
+    const note = notes.find(n => n.midiNumber === midiNumber);
+    if (note) {
+      const noteWithOctave = `${note.note}${note.octave}`;
+      pianoService.releaseNote(noteWithOctave);
+      console.log(`Released note: ${noteWithOctave}`);
+    }
   }, [notes, isRecording, recordingStartTime]);
   
   // Computer keyboard mappings
@@ -454,9 +465,9 @@ export const KeysView: React.FC = () => {
           <h3 className="text-lg font-semibold text-white">Piano Keyboard</h3>
           <div className="text-sm text-gray-400">
             <span className={`inline-block w-2 h-2 rounded-full mr-2 ${
-              audioState.isRunning ? 'bg-green-500' : 'bg-red-500'
+              audioState.isInitialized ? 'bg-green-500' : 'bg-red-500'
             }`}></span>
-            Audio: {audioState.isRunning ? 'Ready' : 'Initializing'}
+            Audio: {audioState.isInitialized ? 'Ready' : 'Initializing'}
           </div>
         </div>
         
