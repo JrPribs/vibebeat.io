@@ -50,7 +50,7 @@ export const createInitialState = (initialProject?: Project): AppState => {
       showHelp: false
     },
     audio: {
-      context: null,
+      isInitialized: false,
       outputLatency: 0,
       sampleRate: 44100,
       isRunning: false,

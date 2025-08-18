@@ -38,16 +38,31 @@ class PadTriggerService {
   private patternEventListeners: ((event: ScheduledEvent) => void)[] = [];
 
   constructor() {
+    // Try to set up audio nodes immediately, but also listen for audio initialization
     this.setupAudioNodes();
     // Defer scheduler integration to avoid initialization race conditions
     setTimeout(() => this.setupSchedulerIntegration(), 0);
+    
+    // Listen for audio service initialization
+    audioService.onStateChange((state) => {
+      if (state.isInitialized && !this.outputGain) {
+        this.setupAudioNodes();
+      }
+    });
+  }
+
+  /**
+   * Initialize audio processing after AudioContext is available
+   */
+  initializeAudio(): void {
+    this.setupAudioNodes();
   }
 
   /**
    * Set up audio processing nodes
    */
   private setupAudioNodes(): void {
-    const context = audioService.getState().context;
+    const context = audioService.getAudioContext();
     if (!context) return;
 
     // Create master output gain
@@ -63,7 +78,7 @@ class PadTriggerService {
    * Create audio processing chains for each pad
    */
   private createPadAudioChains(): void {
-    const context = audioService.getState().context;
+    const context = audioService.getAudioContext();
     if (!context || !this.outputGain) return;
 
     const padNames: PadName[] = [
@@ -171,7 +186,7 @@ class PadTriggerService {
    * Trigger a drum pad manually or programmatically
    */
   triggerPad(padName: PadName, velocity: number = 127): void {
-    const context = audioService.getState().context;
+    const context = audioService.getAudioContext();
     if (!context) {
       console.warn('AudioContext not available. Please enable audio to play sounds.');
       return;
@@ -351,7 +366,7 @@ class PadTriggerService {
    * Stop all currently playing voices
    */
   private stopAllVoices(): void {
-    const context = audioService.getState().context;
+    const context = audioService.getAudioContext();
     if (!context) return;
 
     for (const [voiceId, source] of this.playbackState.activeVoices) {
@@ -372,7 +387,7 @@ class PadTriggerService {
     const padGain = this.padGains.get(padName);
     if (!padGain) return;
 
-    const context = audioService.getState().context;
+    const context = audioService.getAudioContext();
     if (!context) return;
 
     const clampedGain = Math.max(0, Math.min(1, gain));
@@ -386,7 +401,7 @@ class PadTriggerService {
     const padPanner = this.padPanners.get(padName);
     if (!padPanner) return;
 
-    const context = audioService.getState().context;
+    const context = audioService.getAudioContext();
     if (!context) return;
 
     const clampedPan = Math.max(-1, Math.min(1, pan));
@@ -399,7 +414,7 @@ class PadTriggerService {
   setMasterGain(gain: number): void {
     if (!this.outputGain) return;
 
-    const context = audioService.getState().context;
+    const context = audioService.getAudioContext();
     if (!context) return;
 
     const clampedGain = Math.max(0, Math.min(1, gain));

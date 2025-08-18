@@ -5,7 +5,7 @@ import { z } from 'zod';
 
 // Audio Engine State
 export interface AudioContextState {
-  context: AudioContext | null;
+  isInitialized: boolean;
   outputLatency: number;
   sampleRate: number;
   isRunning: boolean;

@@ -128,7 +128,7 @@ export function TopBar(): JSX.Element {
       {/* Right Actions */}
       <div className="flex items-center space-x-3">
         {/* Audio Status Indicator */}
-        {audioService.getState().context?.state === 'suspended' && (
+        {(!audioService.getState().isInitialized || audioService.getAudioContext()?.state === 'suspended') && (
           <div className="flex items-center space-x-2 px-3 py-1 bg-yellow-600/20 border border-yellow-600/30 rounded-lg">
             <Settings className="h-4 w-4 text-yellow-500" />
             <span className="text-xs text-yellow-300">Click to enable audio</span>

@@ -240,7 +240,7 @@ class AudioService {
    */
   getState(): AudioContextState {
     return {
-      context: this.context,
+      isInitialized: this.isInitialized,
       outputLatency: this.outputLatency,
       sampleRate: this.context?.sampleRate || 44100,
       isRunning: this.context?.state === 'running',
@@ -253,6 +253,13 @@ class AudioService {
    */
   getPerformanceMetrics(): PerformanceMetrics {
     return { ...this.performanceMetrics };
+  }
+
+  /**
+   * Get the AudioContext instance (for internal use by audio services)
+   */
+  getAudioContext(): AudioContext | null {
+    return this.context;
   }
 
   /**

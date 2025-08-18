@@ -46,6 +46,10 @@ interface StoreContextType {
     redo: () => void;
     canUndo: boolean;
     canRedo: boolean;
+    
+    // Pattern Management
+    switchPattern: (pattern: 'A' | 'B') => void;
+    duplicatePattern: (from: 'A' | 'B', to: 'A' | 'B') => void;
   };
 }
 
@@ -208,6 +212,21 @@ export const StoreProvider: React.FC<StoreProviderProps> = ({
     enhancedDispatch({ type: 'TOGGLE_HELP' });
   }, [enhancedDispatch]);
 
+  // Pattern management actions
+  const switchPattern = useCallback((pattern: 'A' | 'B') => {
+    enhancedDispatch({ 
+      type: 'SWITCH_PATTERN', 
+      payload: pattern 
+    });
+  }, [enhancedDispatch]);
+
+  const duplicatePattern = useCallback((from: 'A' | 'B', to: 'A' | 'B') => {
+    enhancedDispatch({ 
+      type: 'DUPLICATE_PATTERN', 
+      payload: { from, to }
+    });
+  }, [enhancedDispatch]);
+
   const actions = {
     // Project
     setProject,
@@ -237,7 +256,10 @@ export const StoreProvider: React.FC<StoreProviderProps> = ({
     undo,
     redo,
     canUndo,
-    canRedo
+    canRedo,
+    // Pattern Management
+    switchPattern,
+    duplicatePattern
   };
 
   const contextValue: StoreContextType = {

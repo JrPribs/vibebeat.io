@@ -110,7 +110,7 @@ export const useAudioService = () => {
   }, []);
 
   const getAudioContext = useCallback(() => {
-    return audioService.getState().context;
+    return audioService.getAudioContext();
   }, []);
 
   const getDestination = useCallback(() => {
@@ -147,7 +147,7 @@ export const useAudioService = () => {
     getAudioContext,
     getDestination,
     getAnalyser,
-    isInitialized: state.audio.context !== null,
+    isInitialized: state.audio.isInitialized,
     hasUserInteracted: userInteractionRef.current,
     latencyMs: Math.round(state.audio.outputLatency * 1000)
   };

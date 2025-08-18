@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React from 'react';
 import { 
   Grid3X3, 
   Piano, 
@@ -7,11 +7,13 @@ import {
   Sliders, 
   Layers
 } from 'lucide-react';
+import { useUI, useStore } from '../core/store-context';
 
 type ViewMode = 'pads' | 'keys' | 'sample' | 'record' | 'mixer' | 'arrange';
 
 export function LeftNav(): JSX.Element {
-  const [activeMode, setActiveMode] = useState<ViewMode>('pads');
+  const { currentView } = useUI();
+  const { actions } = useStore();
   
   const navItems = [
     { id: 'pads' as ViewMode, label: 'Pads', icon: Grid3X3 },
@@ -27,9 +29,9 @@ export function LeftNav(): JSX.Element {
       {navItems.map(({ id, label, icon: Icon }) => (
         <button
           key={id}
-          onClick={() => setActiveMode(id)}
+          onClick={() => actions.setView(id)}
           className={`flex flex-col items-center justify-center p-3 mx-2 mb-2 rounded-lg transition-colors ${
-            activeMode === id
+            currentView === id
               ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white'
               : 'text-gray-400 hover:text-white hover:bg-gray-700'
           }`}

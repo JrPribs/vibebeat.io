@@ -40,7 +40,7 @@ class SchedulerService {
    * Initialize the scheduler with AudioWorklet
    */
   async initialize(): Promise<void> {
-    const context = audioService.getState().context;
+    const context = audioService.getAudioContext();
     if (!context) {
       throw new Error('AudioContext not available. Please enable audio first.');
     }
@@ -75,7 +75,7 @@ class SchedulerService {
    * Set up metronome audio nodes
    */
   private setupMetronome(): void {
-    const context = audioService.getState().context;
+    const context = audioService.getAudioContext();
     if (!context) return;
 
     // Create metronome gain node
@@ -302,7 +302,7 @@ class SchedulerService {
    * Trigger a metronome click
    */
   triggerMetronomeClick(isAccent: boolean = false): void {
-    const context = audioService.getState().context;
+    const context = audioService.getAudioContext();
     if (!context || !this.metronomeNode) return;
 
     try {
