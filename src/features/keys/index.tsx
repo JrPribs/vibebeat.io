@@ -2,7 +2,8 @@
 // Piano keyboard interface with scale lock and recording capabilities
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { useStore, useScheduler, useAudioService, pianoService } from '../../core/index.js';
+import { useStore, useScheduler, useAudioService, tonePianoService } from '../../core/index.js';
+import * as Tone from 'tone';
 import { AIControls } from '../../components/AIControls';
 
 interface Note {
@@ -141,12 +142,25 @@ export const KeysView: React.FC = () => {
       }
     }
     
-    // Play the note with piano synthesis
+    // Play the note with Tone.js piano synthesis
     const note = notes.find(n => n.midiNumber === midiNumber);
     if (note) {
       const noteWithOctave = `${note.note}${note.octave}`;
-      pianoService.triggerNote(noteWithOctave, velocity);
-      console.log(`Playing note: ${noteWithOctave} (${midiNumber}) velocity: ${velocity}`);
+      
+      // Start Tone.js if needed and trigger note
+      const playNote = async () => {
+        try {
+          if (Tone.context.state !== 'running') {
+            await Tone.start();
+          }
+          await tonePianoService.triggerNote(noteWithOctave, velocity);
+          console.log(`Playing note: ${noteWithOctave} (${midiNumber}) velocity: ${velocity}`);
+        } catch (error) {
+          console.error('Failed to play note:', error);
+        }
+      };
+      
+      playNote();
     }
   }, [scaleLock, isNoteInScale, notes, isRecording, recordingStartTime]);
   
@@ -189,12 +203,16 @@ export const KeysView: React.FC = () => {
       });
     }
     
-    // Release the note with piano synthesis
+    // Release the note with Tone.js piano synthesis
     const note = notes.find(n => n.midiNumber === midiNumber);
     if (note) {
       const noteWithOctave = `${note.note}${note.octave}`;
-      pianoService.releaseNote(noteWithOctave);
-      console.log(`Released note: ${noteWithOctave}`);
+      try {
+        tonePianoService.releaseNote(noteWithOctave);
+        console.log(`Released note: ${noteWithOctave}`);
+      } catch (error) {
+        console.error('Failed to release note:', error);
+      }
     }
   }, [notes, isRecording, recordingStartTime]);
   

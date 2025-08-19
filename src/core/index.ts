@@ -62,10 +62,18 @@ export {
   pianoService
 } from './piano-service';
 
+export {
+  tonePianoService
+} from './tone-piano-service';
+
 // Mixer & Audio Processing
 export {
   mixerService
 } from './mixer-service';
+
+export {
+  toneMixerService
+} from './tone-mixer-service';
 
 export {
   useMixer
