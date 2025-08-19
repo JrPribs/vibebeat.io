@@ -3,7 +3,7 @@
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useStore, useScheduler, useAudioService, tonePianoService } from '../../core/index.js';
-import * as Tone from 'tone';
+import Tone from 'tone';
 import { AIControls } from '../../components/AIControls';
 
 interface Note {

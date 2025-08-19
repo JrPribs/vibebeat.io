@@ -1,7 +1,7 @@
 // Tone Drum Service
 // Professional drum pad playback using Tone.js Sampler with individual channel processing
 
-import * as Tone from 'tone';
+import Tone from 'tone';
 import type { PadName, Sample, ScheduledEvent } from '../shared/models/index';
 import { toneMixerService } from './tone-mixer-service';
 
