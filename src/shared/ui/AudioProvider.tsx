@@ -38,6 +38,11 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
     // Check if we need to show the enable audio overlay
     const needsUserInteraction = !audioService.hasUserInteracted && !audioService.isInitialized;
     setShowEnableAudio(needsUserInteraction);
+    
+    // Auto-hide modal when audio is successfully initialized
+    if (audioService.isInitialized && audioService.hasUserInteracted) {
+      setShowEnableAudio(false);
+    }
   }, [audioService.hasUserInteracted, audioService.isInitialized]);
 
   const handleEnableAudio = async () => {

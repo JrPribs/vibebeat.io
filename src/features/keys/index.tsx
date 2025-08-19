@@ -402,7 +402,7 @@ export const KeysView: React.FC = () => {
     
     const keyHeight = note.isBlack ? 'h-24' : 'h-40';
     const keyWidth = note.isBlack ? 'w-6' : 'w-8';
-    const keyPosition = note.isBlack ? 'absolute z-10' : 'relative z-0';
+    const keyPosition = note.isBlack ? 'absolute z-20' : 'relative z-0';
     
     return (
       <button
@@ -411,7 +411,7 @@ export const KeysView: React.FC = () => {
           border-2 transition-all duration-75 text-xs font-mono
           select-none touch-manipulation flex flex-col justify-end items-center pb-2
           ${getKeyColor()}
-          ${note.isBlack ? 'text-white' : 'text-gray-800'}
+          ${note.isBlack ? 'text-white cursor-pointer' : 'text-gray-800'}
         `}
         onMouseDown={handleMouseDown}
         onMouseUp={handleMouseUp}
@@ -422,7 +422,8 @@ export const KeysView: React.FC = () => {
                 note.note.includes('D#') ? '44px' :
                 note.note.includes('F#') ? '92px' :
                 note.note.includes('G#') ? '116px' :
-                note.note.includes('A#') ? '140px' : '0px'
+                note.note.includes('A#') ? '140px' : '0px',
+          pointerEvents: 'auto'
         } : {}}
         disabled={scaleLock.enabled && !scaleLock.highlightOnly && !inScale}
         aria-label={`${note.note} (MIDI ${note.midiNumber})`}
@@ -495,7 +496,7 @@ export const KeysView: React.FC = () => {
         <div className="bg-gray-100 p-4 rounded-lg relative overflow-x-auto">
           <div className="flex relative min-w-max">
             {/* White keys */}
-            <div className="flex">
+            <div className="flex relative z-0">
               {notes.filter(note => !note.isBlack).map((note) => (
                 <PianoKey
                   key={note.midiNumber}
@@ -508,16 +509,15 @@ export const KeysView: React.FC = () => {
             </div>
             
             {/* Black keys overlay */}
-            <div className="absolute top-0 left-0 flex pointer-events-none">
+            <div className="absolute top-0 left-4 z-10">
               {notes.filter(note => note.isBlack).map((note) => (
-                <div key={note.midiNumber} className="pointer-events-auto">
-                  <PianoKey
-                    note={note}
-                    isPressed={pressedKeys.has(note.midiNumber)}
-                    velocity={velocities.get(note.midiNumber) || 0}
-                    inScale={isNoteInScale(note.midiNumber)}
-                  />
-                </div>
+                <PianoKey
+                  key={note.midiNumber}
+                  note={note}
+                  isPressed={pressedKeys.has(note.midiNumber)}
+                  velocity={velocities.get(note.midiNumber) || 0}
+                  inScale={isNoteInScale(note.midiNumber)}
+                />
               ))}
             </div>
           </div>
