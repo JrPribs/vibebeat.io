@@ -339,22 +339,22 @@ class MusicRadarKitLoader {
 
     // Define priority samples for each pad type with multiple pattern variants
     const padSamplePriority: { [key in PadName]: string[] } = {
-      'KICK': ['Kick-01', 'Kick01', 'Kick-1', 'Kick1', 'Kick'],
-      'SNARE': ['Snr-01', 'Snr01', 'Snr-1', 'Snr1', 'Snr'],
-      'HIHAT_CLOSED': ['ClHat-01', 'ClHat01', 'ClHat-1', 'ClHat1', 'ClHat'],
-      'HIHAT_OPEN': ['OpHat-01', 'OpHat01', 'OpHat-1', 'OpHat1', 'OpHat'],
-      'CLAP': ['Clap-01', 'Clap01', 'Clap-1', 'Clap1', 'Clap'],
-      'CRASH': ['Crash-01', 'Crash01', 'Crash-1', 'Crash1', 'Crash'],
-      'RIDE': ['Ride-01', 'Ride01', 'Ride-1', 'Ride1', 'Ride'],
-      'TOM_HIGH': ['Tom01', 'Tom-01', 'Tom1', 'Tom-1', 'Tom'],
-      'TOM_MID': ['Tom02', 'Tom-02', 'Tom2', 'Tom-2', 'Tom'],
-      'TOM_FLOOR': ['Tom03', 'Tom-03', 'Tom3', 'Tom-3', 'Tom'],
-      'PERC_01': ['Rim-01', 'Rim01', 'SdSt-01', 'SdSt01', 'Flam-01', 'Flam01', 'Perc01'],
-      'PERC_02': ['Perc-01', 'Perc01', 'FX-01', 'FX01', 'SdSt-02', 'SdSt02', 'Perc02'],
-      'PAD_13': ['FX-01', 'FX01', 'Perc-02', 'Perc02', 'Perc03'],
-      'PAD_14': ['FX-02', 'FX02', 'Perc-03', 'Perc03', 'Perc04'],
-      'PAD_15': ['FX-03', 'FX03', 'Perc-04', 'Perc04', 'Perc05'],
-      'PAD_16': ['FX-04', 'FX04', 'Perc-05', 'Perc05', 'Perc06']
+      'KICK': ['Kick-01', 'Kick01', 'Kick-1', 'Kick1', 'Kick', 'Kick02', 'Kick93'],
+      'SNARE': ['Snr-01', 'Snr01', 'Snr-1', 'Snr1', 'Snr', 'Snr02'],
+      'HIHAT_CLOSED': ['ClHat-01', 'ClHat01', 'ClHat-1', 'ClHat1', 'ClHat', 'ClHat02'],
+      'HIHAT_OPEN': ['OpHat-01', 'OpHat01', 'OpHat-1', 'OpHat1', 'OpHat', 'OpHat02'],
+      'CLAP': ['Clap-01', 'Clap01', 'Clap-1', 'Clap1', 'Clap', 'Clap02'],
+      'CRASH': ['Crash-01', 'Crash01', 'Crash-1', 'Crash1', 'Crash', 'Crash02'],
+      'RIDE': ['Ride-01', 'Ride01', 'Ride-1', 'Ride1', 'Ride', 'Ride02'],
+      'TOM_HIGH': ['Tom01', 'Tom-01', 'Tom1', 'Tom-1', 'Tom', 'Tom01a', 'Tom01b', 'Tom-04', 'Tom04'],
+      'TOM_MID': ['Tom02', 'Tom-02', 'Tom2', 'Tom-2', 'Tom', 'Tom02a', 'Tom02b', 'Tom-05', 'Tom05'],
+      'TOM_FLOOR': ['Tom03', 'Tom-03', 'Tom3', 'Tom-3', 'Tom', 'Tom03a', 'Tom03b'],
+      'PERC_01': ['Rim-01', 'Rim01', 'SdSt-01', 'SdSt01', 'Flam-01', 'Flam01', 'Perc01', 'Brsh01', 'Shkr01'],
+      'PERC_02': ['Perc-01', 'Perc01', 'FX-01', 'FX01', 'SdSt-02', 'SdSt02', 'Perc02', 'Tamb', 'Scratch01'],
+      'PAD_13': ['FX-01', 'FX01', 'Perc-02', 'Perc02', 'Perc03', 'Perc04'],
+      'PAD_14': ['FX-02', 'FX02', 'Perc-03', 'Perc03', 'Perc04', 'Perc05'],
+      'PAD_15': ['FX-03', 'FX03', 'Perc-04', 'Perc04', 'Perc05', 'Perc06'],
+      'PAD_16': ['FX-04', 'FX04', 'Perc-05', 'Perc05', 'Perc06', 'Perc07']
     };
 
     // Try to find samples for each pad
@@ -362,11 +362,8 @@ class MusicRadarKitLoader {
       let foundSample = false;
 
       for (const priority of priorities) {
-        const samplePath = `${kit.basePath}/${this.findMatchingFile(kit.basePath, priority)}`;
-        
-        // For our organized structure, we'll construct the path optimistically
-        // and let Tone.js handle loading validation
-        const constructedPath = `${kit.basePath}/${priority}.wav`;
+        const filename = this.findMatchingFile(kit, priority);
+        const constructedPath = `${kit.basePath}/${filename}`;
         mapping.set(padName as PadName, constructedPath);
         foundSample = true;
         break;
@@ -387,56 +384,85 @@ class MusicRadarKitLoader {
   /**
    * Find matching file patterns for different kit naming conventions
    */
-  private findMatchingFile(basePath: string, pattern: string): string {
-    // Different kit prefixes and naming patterns
-    const prefixPatterns = [
-      'CYCdh_K1close_',    // Kit 1 Close
-      'CYCdh_K2room_',     // Kit 2 Room  
-      'CyCdh_K3',          // Kit 3
-      'CYCdh_ElecK01-',    // Electronic kits
-      'CYCdh_ElecK02-',
-      'CYCdh_VinylK1-',    // Vinyl kits
-      'CYCdh_VinylK2-',
-      'CYCdh_Kurz01-',     // Kurzweil kits
-      'CYCdh_Kurz02-',
-      ''                   // No prefix fallback
-    ];
+  private findMatchingFile(kit: MusicRadarKit, pattern: string): string {
+    // Map kit IDs to their specific prefixes based on the actual file structure
+    const kitPrefixMap: { [kitId: string]: string } = {
+      // Acoustic Category
+      'musicradar-acoustic-01-close': 'CYCdh_K1close_',
+      'musicradar-acoustic-02-room': 'CYCdh_K2room_',
+      'musicradar-acoustic-03-standard': 'CyCdh_K3',
+      'musicradar-acoustic-04-punchy': 'CYCdh_K4-',
+      'musicradar-acoustic-05-vintage': 'CYCdh_K5-',
+      'musicradar-acoustic-06-minimal': 'CYCdh_K6-',
+      
+      // Electronic Category
+      'musicradar-electronic-01-classic': 'CYCdh_ElecK01-',
+      'musicradar-electronic-02-hiphop': 'CYCdh_ElecK02-',
+      'musicradar-electronic-03-minimal': 'CYCdh_ElecK03-',
+      'musicradar-electronic-04-heavy': 'CYCdh_ElecK04-',
+      'musicradar-electronic-05-modern': 'CYCdh_ElecK05-',
+      'musicradar-electronic-06-punchy': 'CYCdh_ElecK06-',
+      'musicradar-electronic-07-deep': 'CYCdh_ElecK07-',
+      
+      // Vinyl Category  
+      'musicradar-vinyl-01-classic': 'CYCdh_VinylK1-',
+      'musicradar-vinyl-02-dusty': 'CYCdh_VinylK2-',
+      'musicradar-vinyl-03-lofi': 'CYCdh_VinylK3-',
+      'musicradar-vinyl-04-crispy': 'CYCdh_VinylK4-',
+      'musicradar-vinyl-05-warm': 'CYCdh_VinylK5-',
+      
+      // Kurzweil Category
+      'musicradar-kurzweil-01-classic': 'CYCdh_Kurz01-',
+      'musicradar-kurzweil-02-modern': 'CYCdh_Kurz02-',
+      'musicradar-kurzweil-03-vintage': 'CYCdh_Kurz03-',
+      'musicradar-kurzweil-04-electronic': 'CYCdh_Kurz04-',
+      'musicradar-kurzweil-05-experimental': 'CYCdh_Kurz05-',
+      'musicradar-kurzweil-06-ambient': 'CYCdh_Kurz06-',
+      'musicradar-kurzweil-07-percussive': 'CYCdh_Kurz07-',
+      'musicradar-kurzweil-08-dynamic': 'CYCdh_Kurz08-'
+    };
 
-    // Try each prefix pattern
-    for (const prefix of prefixPatterns) {
-      const filename = `${prefix}${pattern}`;
-      // Return the most likely match based on the pattern
-      return filename;
+    // Get the appropriate prefix for this kit
+    const prefix = kitPrefixMap[kit.id];
+    
+    if (!prefix) {
+      console.warn(`No prefix mapping found for kit: ${kit.id}`);
+      return `${pattern}.wav`;
     }
 
-    return pattern;
+    // Construct the full filename with prefix and .wav extension
+    return `${prefix}${pattern}.wav`;
   }
 
   /**
    * Find fallback sample for a pad if primary samples aren't available
    */
   private findFallbackSample(padName: PadName, kit: MusicRadarKit): string | null {
-    // Define fallback strategies based on pad type
-    const fallbackMap: { [key in PadName]: string } = {
-      'KICK': `${kit.basePath}/Kick01.wav`,
-      'SNARE': `${kit.basePath}/Snr01.wav`,
-      'HIHAT_CLOSED': `${kit.basePath}/ClHat01.wav`,
-      'HIHAT_OPEN': `${kit.basePath}/OpHat01.wav`,
-      'CLAP': `${kit.basePath}/Clap01.wav`,
-      'CRASH': `${kit.basePath}/Crash01.wav`,
-      'RIDE': `${kit.basePath}/Ride01.wav`,
-      'TOM_HIGH': `${kit.basePath}/Tom01.wav`,
-      'TOM_MID': `${kit.basePath}/Tom02.wav`,
-      'TOM_FLOOR': `${kit.basePath}/Tom03.wav`,
-      'PERC_01': `${kit.basePath}/Perc01.wav`,
-      'PERC_02': `${kit.basePath}/Perc02.wav`,
-      'PAD_13': `${kit.basePath}/FX01.wav`,
-      'PAD_14': `${kit.basePath}/FX02.wav`,
-      'PAD_15': `${kit.basePath}/FX03.wav`,
-      'PAD_16': `${kit.basePath}/FX04.wav`
+    // Define fallback strategies based on pad type using proper prefixes
+    const fallbackPatterns: { [key in PadName]: string } = {
+      'KICK': 'Kick01',
+      'SNARE': 'Snr01',
+      'HIHAT_CLOSED': 'ClHat01',
+      'HIHAT_OPEN': 'OpHat01',
+      'CLAP': 'Clap01',
+      'CRASH': 'Crash01',
+      'RIDE': 'Ride01',
+      'TOM_HIGH': 'Tom01',
+      'TOM_MID': 'Tom02',
+      'TOM_FLOOR': 'Tom03',
+      'PERC_01': 'Rim01',
+      'PERC_02': 'SdSt01',
+      'PAD_13': 'Perc01',
+      'PAD_14': 'Perc02',
+      'PAD_15': 'Perc03',
+      'PAD_16': 'Perc04'
     };
 
-    return fallbackMap[padName] || null;
+    const pattern = fallbackPatterns[padName];
+    if (!pattern) return null;
+
+    const filename = this.findMatchingFile(kit, pattern);
+    return `${kit.basePath}/${filename}`;
   }
 
   /**

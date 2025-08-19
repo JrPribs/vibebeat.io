@@ -536,7 +536,7 @@ class SampleCache {
    */
   async getMusicRadarKitSamples(kitId: string): Promise<Map<PadName, string> | null> {
     try {
-      return await musicRadarKitLoader.getKitSampleMapping(kitId);
+      return await musicRadarKitLoader.generateKitSampleMapping(kitId);
     } catch (error) {
       console.error(`Failed to get MusicRadar kit samples for ${kitId}:`, error);
       return null;
