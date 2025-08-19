@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { musicRadarKitLoader, type MusicRadarKit } from '../../core/musicradar-kit-loader';
 
 interface KitSelectorProps {
@@ -11,23 +11,44 @@ interface KitSelectorProps {
 export function KitSelector({ selectedKit, onKitChange, disabled, isLoading }: KitSelectorProps): JSX.Element {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [kitCoverage, setKitCoverage] = useState<Map<string, number>>(new Map());
   
   // Get all available kits grouped by category
   const kitsByCategory = musicRadarKitLoader.getKitsGroupedByCategory();
   const allKits = musicRadarKitLoader.getAvailableKits();
   
-  // Filter kits based on search and category
-  const filteredKits = allKits.filter(kit => {
-    const matchesSearch = searchQuery === '' || 
-      kit.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      kit.description.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    const matchesCategory = selectedCategory === 'all' || kit.category === selectedCategory;
-    
-    return matchesSearch && matchesCategory;
-  });
+  // Filter kits based on search and category - memoized to prevent infinite loops
+  const filteredKits = useMemo(() => 
+    allKits.filter(kit => {
+      const matchesSearch = searchQuery === '' || 
+        kit.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        kit.description.toLowerCase().includes(searchQuery.toLowerCase());
+      
+      const matchesCategory = selectedCategory === 'all' || kit.category === selectedCategory;
+      
+      return matchesSearch && matchesCategory;
+    }), [searchQuery, selectedCategory, allKits]
+  );
 
   const selectedKitInfo = allKits.find(kit => kit.id === selectedKit);
+
+  // Load coverage information for visible kits
+  useEffect(() => {
+    const loadCoverageInfo = async () => {
+      const newCoverage = new Map<string, number>();
+      
+      // For performance, we'll use estimated coverage for now
+      // In a production app, you might want to cache actual coverage results
+      for (const kit of filteredKits.slice(0, 20)) { // Limit to first 20 for performance
+        const estimated = musicRadarKitLoader.getEstimatedKitCoverage(kit.id);
+        newCoverage.set(kit.id, estimated);
+      }
+      
+      setKitCoverage(newCoverage);
+    };
+
+    loadCoverageInfo();
+  }, [filteredKits]);
 
   return (
     <div className="bg-gray-800 p-4 rounded-lg space-y-4">
@@ -80,28 +101,50 @@ export function KitSelector({ selectedKit, onKitChange, disabled, isLoading }: K
             No kits match your search criteria
           </div>
         ) : (
-          filteredKits.map((kit) => (
-            <button
-              key={kit.id}
-              onClick={() => onKitChange(kit.id)}
-              disabled={disabled}
-              className={`w-full text-left p-3 rounded transition-colors ${
-                selectedKit === kit.id
-                  ? 'bg-vibe-blue text-white'
-                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-              } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex-1">
-                  <div className="font-medium">{kit.name}</div>
-                  <div className="text-xs opacity-70 mt-1">{kit.description}</div>
+          filteredKits.map((kit) => {
+            const coverage = kitCoverage.get(kit.id) || 0;
+            const coveragePercentage = Math.round((coverage / 16) * 100);
+            
+            return (
+              <button
+                key={kit.id}
+                onClick={() => onKitChange(kit.id)}
+                disabled={disabled}
+                className={`w-full text-left p-3 rounded transition-colors ${
+                  selectedKit === kit.id
+                    ? 'bg-vibe-blue text-white'
+                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <div className="font-medium">{kit.name}</div>
+                    <div className="text-xs opacity-70 mt-1">{kit.description}</div>
+                    {coverage > 0 && (
+                      <div className="text-xs mt-1 flex items-center">
+                        <span className="text-gray-400">Coverage:</span>
+                        <span className="ml-1 text-green-400">{coverage}/16 pads</span>
+                        <span className="ml-1 text-gray-500">({coveragePercentage}%)</span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex flex-col items-end space-y-1">
+                    <div className="text-xs bg-gray-600 px-2 py-1 rounded">
+                      {kit.category}
+                    </div>
+                    {coverage > 0 && (
+                      <div className="w-16 h-1 bg-gray-600 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-green-500 transition-all duration-300"
+                          style={{ width: `${coveragePercentage}%` }}
+                        />
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <div className="text-xs bg-gray-600 px-2 py-1 rounded ml-2">
-                  {kit.category}
-                </div>
-              </div>
-            </button>
-          ))
+              </button>
+            );
+          })
         )}
       </div>
 
@@ -116,6 +159,27 @@ export function KitSelector({ selectedKit, onKitChange, disabled, isLoading }: K
           </div>
           <div className="text-white font-medium">{selectedKitInfo.name}</div>
           <div className="text-xs text-gray-400 mt-1">{selectedKitInfo.description}</div>
+          
+          {/* Coverage info for current kit */}
+          {kitCoverage.has(selectedKitInfo.id) && (
+            <div className="mt-2 p-2 bg-gray-700 rounded">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-gray-400">Pad Coverage:</span>
+                <span className="text-green-400">
+                  {kitCoverage.get(selectedKitInfo.id)}/16 pads
+                </span>
+              </div>
+              <div className="mt-1 w-full h-1 bg-gray-600 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-green-500 transition-all duration-300"
+                  style={{ 
+                    width: `${Math.round(((kitCoverage.get(selectedKitInfo.id) || 0) / 16) * 100)}%` 
+                  }}
+                />
+              </div>
+            </div>
+          )}
+          
           <div className="flex items-center gap-2 mt-2">
             <span className="text-xs bg-gray-700 px-2 py-1 rounded">
               {selectedKitInfo.category}

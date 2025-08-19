@@ -20,7 +20,7 @@ import {
   Zap
 } from 'lucide-react';
 import { recordingService, RecordingOptions, AudioClip, RecordingState } from '../../core/recording-service.js';
-import { useStore, useScheduler, useAudioService } from '../../core/index.js';
+import { useStore, useToneTransport, useAudioService } from '../../core/index.js';
 import { supabase, getCurrentUser, uploadAudioRecording } from '../../lib/supabase.js';
 
 interface AssignmentMode {
@@ -31,7 +31,7 @@ interface AssignmentMode {
 
 export function RecordView(): JSX.Element {
   const { actions } = useStore();
-  const { isPlaying, currentPosition } = useScheduler();
+  const { isPlaying, currentPosition } = useToneTransport();
   const { audioState } = useAudioService();
   
   // Recording state

@@ -1,7 +1,7 @@
 // Tone Piano Service
 // Piano synthesis using Tone.js PolySynth for professional quality sound
 
-import Tone from 'tone';
+import * as Tone from 'tone';
 
 // Expose Tone.js globally for debugging and ensure it's loaded
 if (typeof window !== 'undefined') {

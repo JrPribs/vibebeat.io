@@ -1,7 +1,7 @@
 // Tone Drum Service
 // Professional drum pad playback using Tone.js Sampler with individual channel processing
 
-import Tone from 'tone';
+import * as Tone from 'tone';
 import type { PadName, Sample, ScheduledEvent } from '../shared/models/index';
 import { toneMixerService } from './tone-mixer-service';
 
@@ -91,7 +91,7 @@ class ToneDrumService {
   }
 
   /**
-   * Initialize individual pad samplers and their processing chains
+   * Initialize individual pad channels (samplers will be created when samples are loaded)
    */
   private async initializePadSamplers(): Promise<void> {
     const padNames: PadName[] = [
@@ -110,23 +110,14 @@ class ToneDrumService {
         solo: false
       });
 
-      // Create sampler for this pad
-      const sampler = new Tone.Sampler({
-        attack: 0.001, // Very fast attack for percussive sounds
-        release: 0.1, // Quick release for tight drum sounds
-        curve: 'exponential'
-      });
-
-      // Connect: Sampler -> Channel -> Master Channel
-      sampler.connect(channel);
+      // Connect channel to master channel
       channel.connect(this.masterChannel!);
 
-      // Store references
-      this.padSamplers.set(padName, sampler);
+      // Store channel reference (samplers will be created when samples are loaded)
       this.padChannels.set(padName, channel);
     }
 
-    console.log(`✅ Initialized ${padNames.length} pad samplers with individual channels`);
+    console.log(`✅ Initialized ${padNames.length} pad channels (samplers will be created when samples are loaded)`);
   }
 
   /**
@@ -191,12 +182,21 @@ class ToneDrumService {
       // Clear current samples
       this.clearCurrentSamples();
 
-      // Create new samplers for each pad with the correct sample
-      for (const [padName, sampleUrl] of sampleMapping.entries()) {
+      // Load samples in parallel with proper async handling
+      const loadPromises = Array.from(sampleMapping.entries()).map(async ([padName, sampleUrl]) => {
         const channel = this.padChannels.get(padName);
-        if (!channel) continue;
+        if (!channel) return null;
 
         try {
+          // Properly dispose old sampler if it exists
+          if (this.padSamplers.has(padName)) {
+            const oldSampler = this.padSamplers.get(padName);
+            if (oldSampler) {
+              oldSampler.disconnect();
+              oldSampler.dispose();
+            }
+          }
+
           // Create a new sampler with the specific sample loaded
           const sampler = new Tone.Sampler({
             urls: {
@@ -204,27 +204,34 @@ class ToneDrumService {
             },
             attack: 0.001, // Very fast attack for percussive sounds
             release: 0.1, // Quick release for tight drum sounds
-            curve: 'exponential'
+            curve: 'exponential',
+            onload: () => {
+              console.log(`✅ Sample loaded for ${padName}: ${sampleUrl}`);
+            },
+            onerror: (error) => {
+              console.error(`❌ Failed to load sample for ${padName}:`, error);
+            }
           });
 
-          // Connect: Sampler -> Channel -> Master Channel
+          // Connect: Sampler -> Channel (channel already connected to master)
           sampler.connect(channel);
 
-          // Store the new sampler
-          if (this.padSamplers.has(padName)) {
-            // Dispose old sampler
-            this.padSamplers.get(padName)?.dispose();
-          }
+          // Store the new sampler and sample URL
           this.padSamplers.set(padName, sampler);
           this.padSamples.set(padName, sampleUrl);
 
-          console.log(`✅ Loaded sample for ${padName}: ${sampleUrl}`);
+          return { padName, success: true };
 
         } catch (error) {
-          console.error(`❌ Failed to load sample for ${padName}:`, error);
-          // Continue loading other samples even if one fails
+          console.error(`❌ Failed to create sampler for ${padName}:`, error);
+          return { padName, success: false };
         }
-      }
+      });
+
+      // Wait for all samples to load
+      const results = await Promise.all(loadPromises);
+      const successfulLoads = results.filter(result => result?.success).length;
+      console.log(`✅ Loaded ${successfulLoads}/${sampleMapping.size} samples successfully`);
 
       this.playbackState.currentKit = kitId;
       console.log(`✅ Loaded ${sampleMapping.size} samples for kit: ${kitId}`);
@@ -240,8 +247,10 @@ class ToneDrumService {
    */
   private clearCurrentSamples(): void {
     for (const sampler of this.padSamplers.values()) {
+      sampler.disconnect();
       sampler.dispose();
     }
+    this.padSamplers.clear();
     this.padSamples.clear();
     this.sampleVariations.clear();
   }
@@ -268,6 +277,12 @@ class ToneDrumService {
 
     if (!this.padSamples.has(padName)) {
       console.warn(`No sample loaded for pad: ${padName}`);
+      return;
+    }
+
+    // Check if the sampler actually has a loaded buffer
+    if (!sampler.loaded) {
+      console.warn(`Sampler for ${padName} is not loaded yet`);
       return;
     }
 

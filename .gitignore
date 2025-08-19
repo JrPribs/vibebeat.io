@@ -106,13 +106,3 @@ public
 tmp/
 temp/
 
-# Audio files (development)
-*.wav
-*.mp3
-*.ogg
-*.flac
-*.aac
-
-# Except factory content
-!/public/assets/**/*.wav
-!/public/assets/**/*.mp3

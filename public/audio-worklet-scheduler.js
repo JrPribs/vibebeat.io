@@ -1,5 +1,9 @@
-// Audio Worklet Scheduler
+// Audio Worklet Scheduler - DEPRECATED
 // Sample-accurate scheduling using AudioWorklet for precise timing
+// 
+// ⚠️  DEPRECATED: This AudioWorklet scheduler is being replaced by ToneTransportService
+// ⚠️  which provides better integration with Tone.js and more reliable timing.
+// ⚠️  This file will be removed in a future version.
 
 // This code runs in the AudioWorklet scope (separate thread)
 class SchedulerProcessor extends AudioWorkletProcessor {

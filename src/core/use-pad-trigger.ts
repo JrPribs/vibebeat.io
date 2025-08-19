@@ -72,7 +72,7 @@ export function usePadTrigger() {
       // Force re-evaluation when refreshTrigger changes
       return padTriggerService.hasPadSample(padName);
     },
-    activeVoices: padTriggerService.activeVoices,
+    activeVoices: new Map(), // Tone.js manages voices internally
     // Debug info
     refreshCount: refreshTrigger
   };

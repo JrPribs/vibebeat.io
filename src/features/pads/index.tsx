@@ -2,7 +2,7 @@
 // 4x4 drum pads with keyboard mappings, velocity control, and step sequencer
 
 import React, { useEffect, useCallback, useState, useRef } from 'react';
-import { useStore, usePadTrigger, useScheduler, useAudioService } from '../../core/index.js';
+import { useStore, usePadTrigger, useToneTransport, useAudioService } from '../../core/index.js';
 import { KitSelector } from '../../shared/ui/KitSelector.js';
 import { StepSequencer } from '../../shared/ui/StepSequencer.js';
 import { SwingQuantizeControls } from '../../shared/ui/SwingQuantizeControls.js';
@@ -13,7 +13,7 @@ import type { PadName } from '../../shared/models/index.js';
 export const PadsView: React.FC = () => {
   const { actions } = useStore();
   const { triggerPad, hasPadSample, activeVoices, currentKit, setKit, isLoading } = usePadTrigger();
-  const { isPlaying, currentPosition } = useScheduler();
+  const { isPlaying, currentPosition } = useToneTransport();
   const { audioState } = useAudioService();
   
   const [pressedPads, setPressedPads] = useState<Set<PadName>>(new Set());
@@ -173,22 +173,23 @@ export const PadsView: React.FC = () => {
       }
     }, [padName]);
     
-    // Color coding by pad type with velocity-based brightness
+    // Color coding by pad type with clear empty/loaded distinction
     const getPadColor = (): string => {
-      if (!isLoaded) return 'bg-gray-700 border-gray-600';
+      if (!isLoaded) {
+        return 'bg-gray-800 border-2 border-dashed border-gray-500';
+      }
       
-      const velocityBoost = isPressed ? Math.min(velocity / 127 * 0.5, 0.5) : 0;
-      const baseOpacity = 0.8 + velocityBoost;
+      const baseClass = isPressed ? '' : 'border-2 border-solid';
       
-      if (padName.includes('KICK')) return `bg-red-900 border-red-700 ${isPressed ? 'bg-red-500' : ''}`;
-      if (padName.includes('SNARE')) return `bg-orange-900 border-orange-700 ${isPressed ? 'bg-orange-500' : ''}`;
-      if (padName.includes('HIHAT')) return `bg-yellow-900 border-yellow-700 ${isPressed ? 'bg-yellow-500' : ''}`;
-      if (padName.includes('CLAP')) return `bg-purple-900 border-purple-700 ${isPressed ? 'bg-purple-500' : ''}`;
-      if (padName.includes('CRASH') || padName.includes('RIDE')) return `bg-blue-900 border-blue-700 ${isPressed ? 'bg-blue-500' : ''}`;
-      if (padName.includes('TOM')) return `bg-green-900 border-green-700 ${isPressed ? 'bg-green-500' : ''}`;
-      if (padName.includes('PERC')) return `bg-pink-900 border-pink-700 ${isPressed ? 'bg-pink-500' : ''}`;
+      if (padName.includes('KICK')) return `bg-red-900 border-red-700 ${baseClass} ${isPressed ? 'bg-red-500' : ''}`;
+      if (padName.includes('SNARE')) return `bg-orange-900 border-orange-700 ${baseClass} ${isPressed ? 'bg-orange-500' : ''}`;
+      if (padName.includes('HIHAT')) return `bg-yellow-900 border-yellow-700 ${baseClass} ${isPressed ? 'bg-yellow-500' : ''}`;
+      if (padName.includes('CLAP')) return `bg-purple-900 border-purple-700 ${baseClass} ${isPressed ? 'bg-purple-500' : ''}`;
+      if (padName.includes('CRASH') || padName.includes('RIDE')) return `bg-blue-900 border-blue-700 ${baseClass} ${isPressed ? 'bg-blue-500' : ''}`;
+      if (padName.includes('TOM')) return `bg-green-900 border-green-700 ${baseClass} ${isPressed ? 'bg-green-500' : ''}`;
+      if (padName.includes('PERC')) return `bg-pink-900 border-pink-700 ${baseClass} ${isPressed ? 'bg-pink-500' : ''}`;
       
-      return `bg-gray-700 border-gray-600 ${isPressed ? 'bg-gray-500' : ''}`;
+      return `bg-gray-700 border-gray-600 ${baseClass} ${isPressed ? 'bg-gray-500' : ''}`;
     };
     
     const formatPadName = (name: string): string => {
@@ -199,18 +200,19 @@ export const PadsView: React.FC = () => {
       <button
         className={`
           aspect-square rounded-lg flex flex-col items-center justify-center
-          text-gray-300 font-medium transition-all duration-100 border-2
+          text-gray-300 font-medium transition-all duration-100
           select-none touch-manipulation relative overflow-hidden
           ${getPadColor()}
-          ${isLoaded ? 'hover:brightness-125 active:scale-95 cursor-pointer' : 'cursor-not-allowed opacity-50'}
+          ${isLoaded ? 'hover:brightness-125 active:scale-95 cursor-pointer' : 'hover:border-gray-400 cursor-pointer'}
           ${isPressed ? 'scale-95 shadow-inner' : 'shadow-lg'}
           min-h-[80px] md:min-h-[100px]
         `}
-        onMouseDown={handleMouseDown}
-        onTouchStart={handleTouchStart}
+        onMouseDown={isLoaded ? handleMouseDown : undefined}
+        onTouchStart={isLoaded ? handleTouchStart : undefined}
         onContextMenu={(e) => handlePadRightClick(e, padName)}
-        disabled={!isLoaded || isLoading}
-        aria-label={`Drum pad ${index + 1}: ${formatPadName(padName)} (Key: ${keyBinding})`}
+        onClick={!isLoaded ? (e) => handlePadRightClick(e, padName) : undefined}
+        disabled={isLoading}
+        aria-label={`Drum pad ${index + 1}: ${isLoaded ? formatPadName(padName) : 'Empty - click to assign'} (Key: ${keyBinding})`}
       >
         {/* Velocity glow effect */}
         {isPressed && velocity > 0 && (
@@ -225,13 +227,20 @@ export const PadsView: React.FC = () => {
           {keyBinding}
         </div>
         
+        {/* Empty pad indicator */}
+        {!isLoaded && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="text-4xl text-gray-500 font-light">+</div>
+          </div>
+        )}
+        
         {/* Pad Name */}
-        <span className={`text-xs font-bold mb-1 z-10 ${isPressed ? 'text-white' : 'text-gray-300'}`}>
-          {formatPadName(padName)}
+        <span className={`text-xs font-bold mb-1 z-10 ${isPressed ? 'text-white' : isLoaded ? 'text-gray-300' : 'text-gray-500'}`}>
+          {isLoaded ? formatPadName(padName) : 'EMPTY'}
         </span>
         
         {/* Pad Number */}
-        <span className={`text-xs opacity-70 z-10 ${isPressed ? 'text-white' : 'text-gray-400'}`}>
+        <span className={`text-xs opacity-70 z-10 ${isPressed ? 'text-white' : isLoaded ? 'text-gray-400' : 'text-gray-500'}`}>
           PAD {index + 1}
         </span>
         
@@ -242,16 +251,14 @@ export const PadsView: React.FC = () => {
           </div>
         )}
         
-        {/* Status indicator */}
-        <div className="mt-1 z-10">
-          {!isLoaded ? (
-            <div className="w-2 h-2 rounded-full bg-red-500 opacity-60"></div>
-          ) : (
+        {/* Status indicator - only show for loaded pads */}
+        {isLoaded && (
+          <div className="mt-1 z-10">
             <div className={`w-2 h-2 rounded-full ${
               isPressed ? 'bg-white' : 'bg-green-500'
             }`}></div>
-          )}
-        </div>
+          </div>
+        )}
       </button>
     );
   };
@@ -293,7 +300,7 @@ export const PadsView: React.FC = () => {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold">Drum Pads</h2>
-          <p className="text-gray-400 text-sm">Click pads or use keyboard shortcuts • Right-click to assign sounds • Hold Shift for high velocity</p>
+          <p className="text-gray-400 text-sm">Click loaded pads or use keyboard • Click empty pads to assign sounds • Right-click for sound browser • Hold Shift for high velocity</p>
         </div>
         <div className="flex items-center space-x-4 text-sm">
           <div>

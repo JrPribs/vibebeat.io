@@ -1,5 +1,9 @@
-// Scheduler Service
+// Scheduler Service - DEPRECATED
 // Manages AudioWorklet scheduler for sample-accurate timing and metronome
+//
+// ⚠️  DEPRECATED: This service is being replaced by ToneTransportService
+// ⚠️  which provides better integration with Tone.js and more reliable timing.
+// ⚠️  Use toneTransportService instead for new implementations.
 
 import type { ScheduledEvent, TransportState } from '../shared/models/index';
 import { audioService } from './audio-service';

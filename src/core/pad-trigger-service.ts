@@ -41,18 +41,12 @@ class PadTriggerService {
     // Initialize Tone.js drum service
     this.initializeToneJsService();
     
-    // Set up legacy Web Audio API nodes for fallback
-    this.setupAudioNodes();
+    // Legacy Web Audio API nodes removed - using pure Tone.js architecture
     
     // Defer scheduler integration to avoid initialization race conditions
     setTimeout(() => this.setupSchedulerIntegration(), 0);
     
-    // Listen for audio service initialization
-    audioService.onStateChange((state) => {
-      if (state.isInitialized && !this.outputGain) {
-        this.setupAudioNodes();
-      }
-    });
+    // Audio service integration no longer needed - using pure Tone.js architecture
   }
 
   /**
@@ -79,9 +73,6 @@ class PadTriggerService {
    * All audio processing is now handled by Tone.js services
    * Legacy AudioContext setup methods removed
    */
-
-    // Legacy pad chain creation removed - using Tone.js services
-  }
 
   /**
    * Set up integration with scheduler service
@@ -135,10 +126,6 @@ class PadTriggerService {
    */
   async loadMusicRadarKit(kitId: string): Promise<void> {
     try {
-      if (!this.playbackState.useToneJs) {
-        throw new Error('Tone.js not available, cannot load MusicRadar kit');
-      }
-
       // Get sample mapping from cache/loader
       const sampleMapping = await sampleCache.getMusicRadarKitSamples(kitId);
       if (!sampleMapping) {
@@ -329,16 +316,15 @@ class PadTriggerService {
    */
   getPlaybackState(): PlaybackState {
     return {
-      ...this.playbackState,
-      activeVoices: new Map(this.playbackState.activeVoices)
+      ...this.playbackState
     };
   }
 
   /**
-   * Get loaded pad samples
+   * Get loaded pad samples (delegated to Tone.js service)
    */
   getPadSamples(): Map<PadName, Sample> {
-    return new Map(this.padSamples);
+    return new Map(); // Tone.js manages samples internally
   }
 
   // Event listener management

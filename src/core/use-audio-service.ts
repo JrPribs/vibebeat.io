@@ -7,7 +7,7 @@ import { audioService } from './audio-service';
 import { schedulerService } from './scheduler-service';
 import { tonePianoService } from './tone-piano-service';
 import { toneMixerService } from './tone-mixer-service';
-import Tone from 'tone';
+import * as Tone from 'tone';
 import type { AudioContextState, AudioError, PerformanceMetrics } from '../shared/models/index';
 
 export const useAudioService = () => {

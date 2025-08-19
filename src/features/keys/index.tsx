@@ -2,8 +2,8 @@
 // Piano keyboard interface with scale lock and recording capabilities
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { useStore, useScheduler, useAudioService, tonePianoService } from '../../core/index.js';
-import Tone from 'tone';
+import { useStore, useToneTransport, useAudioService, tonePianoService } from '../../core/index.js';
+import * as Tone from 'tone';
 import { AIControls } from '../../components/AIControls';
 
 interface Note {
@@ -50,7 +50,7 @@ const KEYS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
 export const KeysView: React.FC = () => {
   const { actions } = useStore();
-  const { isPlaying, currentPosition } = useScheduler();
+  const { isPlaying, currentPosition } = useToneTransport();
   const { audioState } = useAudioService();
   
   const [octaveRange, setOctaveRange] = useState({ start: 3, end: 5 }); // C3 to B5 (3 octaves)

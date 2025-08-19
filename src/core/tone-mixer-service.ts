@@ -1,7 +1,7 @@
 // Tone Mixer Service
 // Audio mixing and effects using Tone.js Channel and effects
 
-import Tone from 'tone';
+import * as Tone from 'tone';
 
 interface ChannelConfig {
   volume?: number; // -60 to 0 dB

@@ -41,19 +41,22 @@ pnpm run build:skip-ts
 The audio engine follows a singleton pattern with these core services:
 
 1. **AudioService** (`src/core/audio-service.ts`) - Web Audio API management, latency modes
-2. **SchedulerService** (`src/core/scheduler-service.ts`) - Sample-accurate timing via AudioWorklet
-3. **PadTriggerService** (`src/core/pad-trigger-service.ts`) - Drum pad triggering and audio routing  
-4. **SampleCache** (`src/core/sample-cache.ts`) - AudioBuffer management and factory kit loading
-5. **MixerService** (`src/core/mixer-service.ts`) - Channel mixing and effects
-6. **RecordingService** (`src/core/recording-service.ts`) - Microphone recording with bar-sync
-7. **TonePianoService** (`src/core/tone-piano-service.ts`) - **ACTIVE** Professional piano synthesis via Tone.js PolySynth
-8. **ToneMixerService** (`src/core/tone-mixer-service.ts`) - **ACTIVE** Professional mixing with Tone.js Channel and effects
+2. **ToneTransportService** (`src/core/tone-transport-service.ts`) - **NEW** Professional timing via Tone.js Transport
+3. **SchedulerService** (`src/core/scheduler-service.ts`) - **DEPRECATED** Sample-accurate timing via AudioWorklet
+4. **PadTriggerService** (`src/core/pad-trigger-service.ts`) - **MIGRATED TO TONE.JS** - Pure Tone.js drum pad system  
+5. **ToneDrumService** (`src/core/tone-drum-service.ts`) - **NEW** Professional drum pad synthesis via Tone.js Sampler
+5. **SampleCache** (`src/core/sample-cache.ts`) - AudioBuffer management and factory kit loading
+6. **MixerService** (`src/core/mixer-service.ts`) - Channel mixing and effects
+7. **RecordingService** (`src/core/recording-service.ts`) - Microphone recording with bar-sync
+8. **TonePianoService** (`src/core/tone-piano-service.ts`) - **ACTIVE** Professional piano synthesis via Tone.js PolySynth
+9. **ToneMixerService** (`src/core/tone-mixer-service.ts`) - **ACTIVE** Professional mixing with Tone.js Channel and effects
 
-### AudioWorklet Architecture
-- **Critical**: Uses `public/audio-worklet-scheduler.js` for sample-accurate timing
+### ⚠️ DEPRECATED: AudioWorklet Architecture (Legacy)
+- **DEPRECATED**: Previously used `public/audio-worklet-scheduler.js` for sample-accurate timing
+- **REPLACED BY**: ToneTransportService provides superior timing via Tone.js Transport
 - AudioWorklet runs in separate audio thread for sub-millisecond precision
 - Communication via message passing between main thread and worklet
-- Must handle user gesture requirement for AudioContext initialization
+- **NOTE**: Legacy AudioWorklet files remain for compatibility but are deprecated
 
 ### State Management
 - React Context + useReducer pattern (`src/core/store-context.tsx`)
@@ -76,18 +79,21 @@ Features are organized by function in `src/features/` with single-file component
 ### Feature Integration Pattern
 All features follow consistent integration:
 ```typescript
-import { useStore, useAudioService, useScheduler, tonePianoService } from '../../core/index.js';
-import Tone from 'tone'; // Default import pattern for Tone.js
+import { useStore, useAudioService, useToneTransport, tonePianoService, toneDrumService } from '../../core/index.js';
+import * as Tone from 'tone'; // Named import pattern for Tone.js (ES modules)
 
 const { actions } = useStore();
 const { audioState } = useAudioService();  
-const { isPlaying, currentPosition } = useScheduler();
+const { isPlaying, currentPosition } = useToneTransport();
 
-// For piano features, also initialize Tone.js
+// For piano features, initialize Tone.js
 if (Tone.context.state !== 'running') {
   await Tone.start();
 }
 await tonePianoService.triggerNote('C4', 100);
+
+// For drum features, use ToneDrumService
+await toneDrumService.triggerPad('KICK', 127);
 ```
 
 ## Data Models and Validation
@@ -108,33 +114,39 @@ await tonePianoService.triggerNote('C4', 100);
 ### Initialization Sequence
 1. User interaction triggers audio system (Web Audio policy requirement)
 2. **Tone.js context startup** (`await Tone.start()`) - Must happen first
-3. **TonePianoService and ToneMixerService initialization** - Professional audio services
-4. AudioContext creation with optimal settings (low/stable latency modes)
-5. AudioWorklet processor loading from `public/audio-worklet-scheduler.js`
+3. **TonePianoService, ToneMixerService, ToneDrumService, and ToneTransportService initialization** - Professional audio services
+4. AudioContext creation with optimal settings (low/stable latency modes) - **DEPRECATED**
+5. ~~AudioWorklet processor loading~~ - **DEPRECATED** (replaced by Tone.js Transport)
 6. Service interconnection and factory kit preloading
 
 ### **CRITICAL: Tone.js Integration (August 2025)**
-- **Status**: ✅ FULLY FUNCTIONAL - Piano keyboard producing professional audio
-- **Version**: Tone.js v15.1.22 with default import pattern
-- **Import Pattern**: `import Tone from 'tone'` (NOT `import * as Tone`)
+- **Status**: ✅ FULLY FUNCTIONAL - Piano keyboard and drum pads producing professional audio
+- **Version**: Tone.js v15.1.22 with ES module import pattern
+- **Import Pattern**: `import * as Tone from 'tone'` (ES modules - named exports)
 - **Global Access**: Tone.js exposed as `window.Tone` for debugging
-- **Architecture**: Hybrid approach - Tone.js for synthesis, custom services for sequencing
+- **Architecture**: **MIGRATED** - Pure Tone.js architecture for all synthesis (piano + drums)
 
 ### Timing and Synchronization
 - **Resolution**: 16th note steps (4 steps per beat)
-- **Precision**: Sub-millisecond accuracy via AudioWorklet
-- **Latency Modes**: 
-  - Low: 5ms target for real-time performance
-  - Stable: 20ms target for CPU-constrained environments
+- **Precision**: Sample-accurate timing via Tone.js Transport
+- **Transport**: Professional BPM, swing, time signature, and loop controls
+- **Legacy**: ~~AudioWorklet precision~~ - **DEPRECATED** (replaced by Tone.js Transport)
 
 ### Audio Processing Chain
 ```
-User Input → Store Actions → Service Updates → AudioWorklet → Audio Output
-                        ↓
-Sample Cache ← Factory Kits ← PadTriggerService ← Scheduler Events
+TRANSPORT & TIMING (Tone.js):
+User Input → ToneTransportService → Tone.Transport → Global Timing
 
 PIANO SYNTHESIS (Tone.js):
 User Input → TonePianoService → Tone.PolySynth → ToneMixerService → Audio Output
+
+DRUM SYNTHESIS (Tone.js):
+User Input → PadTriggerService → ToneDrumService → Tone.Sampler → ToneMixerService → Audio Output
+           ↓
+      MusicRadar Kit Loading → Sample Path Mapping → Tone.js Buffer Loading
+
+LEGACY (DEPRECATED):
+User Input → Store Actions → Service Updates → AudioWorklet → Audio Output
 ```
 
 ## Supabase Integration
@@ -206,7 +218,8 @@ User Input → TonePianoService → Tone.PolySynth → ToneMixerService → Audi
 3. Update store actions and state if needed
 4. Follow singleton service pattern for audio processing
 5. **For synthesis features**: Use Tone.js services (TonePianoService, ToneMixerService)
-6. **For sample playback**: Use custom services (PadTriggerService, SampleCache)
+6. **For drum pad features**: Use ToneDrumService (Tone.js-based sample playback)
+7. **For legacy features**: Use custom services (SampleCache - being phased out)
 
 ### Modifying Audio Timing
 - Always work through SchedulerService
