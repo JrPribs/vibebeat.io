@@ -18,9 +18,7 @@ interface PlaybackState {
   isPlaying: boolean;
   currentPattern: DrumTrack | null;
   scheduledEvents: ScheduledEvent[];
-  activeVoices: Map<string, AudioBufferSourceNode>; // Legacy compatibility
   currentKit: string | null;
-  useToneJs: boolean; // Flag to enable Tone.js integration
 }
 
 class PadTriggerService {
@@ -28,15 +26,10 @@ class PadTriggerService {
     isPlaying: false,
     currentPattern: null,
     scheduledEvents: [],
-    activeVoices: new Map(),
-    currentKit: null,
-    useToneJs: true // Default to Tone.js for new implementations
+    currentKit: null
   };
   
-  private padSamples: Map<PadName, Sample> = new Map();
-  private outputGain: GainNode | null = null;
-  private padGains: Map<PadName, GainNode> = new Map();
-  private padPanners: Map<PadName, StereoPannerNode> = new Map();
+  // Legacy properties removed - now using pure Tone.js architecture
   
   // Event listeners
   private padTriggerListeners: ((padName: PadName, velocity: number, time: number) => void)[] = [];
@@ -77,64 +70,17 @@ class PadTriggerService {
       this.notifyStateChange();
       
     } catch (error) {
-      console.error('❌ PadTriggerService: Tone.js initialization failed, falling back to legacy mode:', error);
-      this.playbackState.useToneJs = false;
+      console.error('❌ PadTriggerService: Tone.js initialization failed:', error);
+      throw error;
     }
   }
 
   /**
-   * Initialize audio processing after AudioContext is available
+   * All audio processing is now handled by Tone.js services
+   * Legacy AudioContext setup methods removed
    */
-  initializeAudio(): void {
-    this.setupAudioNodes();
-  }
 
-  /**
-   * Set up audio processing nodes
-   */
-  private setupAudioNodes(): void {
-    const context = audioService.getAudioContext();
-    if (!context) return;
-
-    // Create master output gain
-    this.outputGain = context.createGain();
-    this.outputGain.gain.setValueAtTime(0.8, context.currentTime);
-    this.outputGain.connect(context.destination);
-
-    // Create individual pad processing chains
-    this.createPadAudioChains();
-  }
-
-  /**
-   * Create audio processing chains for each pad
-   */
-  private createPadAudioChains(): void {
-    const context = audioService.getAudioContext();
-    if (!context || !this.outputGain) return;
-
-    const padNames: PadName[] = [
-      'KICK', 'SNARE', 'HIHAT_CLOSED', 'HIHAT_OPEN',
-      'CLAP', 'CRASH', 'RIDE', 'TOM_HIGH',
-      'TOM_MID', 'TOM_FLOOR', 'PERC_01', 'PERC_02',
-      'PAD_13', 'PAD_14', 'PAD_15', 'PAD_16'
-    ];
-
-    for (const padName of padNames) {
-      // Create gain node for this pad
-      const gainNode = context.createGain();
-      gainNode.gain.setValueAtTime(1.0, context.currentTime);
-      
-      // Create panner node for this pad
-      const pannerNode = context.createStereoPanner();
-      pannerNode.pan.setValueAtTime(0, context.currentTime);
-      
-      // Connect: panner -> gain -> output
-      pannerNode.connect(gainNode);
-      gainNode.connect(this.outputGain);
-      
-      this.padGains.set(padName, gainNode);
-      this.padPanners.set(padName, pannerNode);
-    }
+    // Legacy pad chain creation removed - using Tone.js services
   }
 
   /**
@@ -177,24 +123,11 @@ class PadTriggerService {
   }
 
   /**
-   * Load samples for a specific kit (legacy factory kits)
+   * Load samples for a specific kit using Tone.js
+   * Legacy factory kit loading replaced with MusicRadar kits
    */
-  async loadKitSamples(kitId: string): Promise<void> {
-    try {
-      const samples = await sampleCache.loadFactoryKit(kitId);
-      
-      // Update pad samples mapping
-      for (const [padName, sample] of samples.entries()) {
-        this.padSamples.set(padName as PadName, sample);
-      }
-      
-      this.playbackState.currentKit = kitId;
-      console.log(`Loaded ${samples.size} pad samples for kit: ${kitId}`);
-      
-    } catch (error) {
-      console.error('Failed to load kit samples:', error);
-      throw error;
-    }
+  async loadKit(kitId: string): Promise<void> {
+    return this.loadMusicRadarKit(kitId);
   }
 
   /**
@@ -242,21 +175,9 @@ class PadTriggerService {
   }
 
   /**
-   * Trigger a drum pad manually or programmatically
+   * Trigger a drum pad manually or programmatically using Tone.js
    */
-  triggerPad(padName: PadName, velocity: number = 127): void {
-    // Use Tone.js if available, otherwise fallback to legacy Web Audio API
-    if (this.playbackState.useToneJs) {
-      this.triggerPadWithToneJs(padName, velocity);
-    } else {
-      this.triggerPadLegacy(padName, velocity);
-    }
-  }
-
-  /**
-   * Trigger pad using Tone.js (preferred method)
-   */
-  private async triggerPadWithToneJs(padName: PadName, velocity: number = 127): Promise<void> {
+  async triggerPad(padName: PadName, velocity: number = 127): Promise<void> {
     try {
       await toneDrumService.triggerPad(padName, velocity);
       
@@ -267,102 +188,24 @@ class PadTriggerService {
       });
       
     } catch (error) {
-      console.error(`Failed to trigger pad ${padName} with Tone.js:`, error);
-      // Fallback to legacy method if Tone.js fails
-      this.triggerPadLegacy(padName, velocity);
+      console.error(`Failed to trigger pad ${padName}:`, error);
     }
   }
 
-  /**
-   * Trigger pad using legacy Web Audio API (fallback method)
-   */
-  private triggerPadLegacy(padName: PadName, velocity: number = 127): void {
-    const context = audioService.getAudioContext();
-    if (!context) {
-      console.warn('AudioContext not available. Please enable audio to play sounds.');
-      return;
-    }
-
-    const sample = this.padSamples.get(padName);
-    if (!sample) {
-      console.warn(`No sample loaded for pad: ${padName}`);
-      return;
-    }
-
-    const time = context.currentTime;
-    const gain = 1.0;
-    const pan = 0;
-
-    try {
-      // Create audio buffer source
-      const source = context.createBufferSource();
-      source.buffer = sample.buffer;
-      
-      // Create gain node for this voice
-      const voiceGain = context.createGain();
-      
-      // Calculate final gain (velocity + voice gain + pad gain)
-      const velocityGain = velocity / 127; // Convert MIDI velocity to 0-1
-      const finalGain = velocityGain * gain;
-      voiceGain.gain.setValueAtTime(finalGain, time);
-      
-      // Get pad's processing chain
-      const padPanner = this.padPanners.get(padName);
-      if (!padPanner) {
-        console.warn(`No panner found for pad: ${padName}`);
-        return;
-      }
-      
-      // Apply temporary pan if specified
-      if (pan !== 0) {
-        const tempPanner = context.createStereoPanner();
-        tempPanner.pan.setValueAtTime(pan, time);
-        source.connect(voiceGain);
-        voiceGain.connect(tempPanner);
-        tempPanner.connect(padPanner);
-      } else {
-        source.connect(voiceGain);
-        voiceGain.connect(padPanner);
-      }
-      
-      // Schedule playback
-      source.start(time);
-      
-      // Clean up when finished
-      const voiceId = `${padName}-${Date.now()}-${Math.random()}`;
-      this.playbackState.activeVoices.set(voiceId, source);
-      
-      source.onended = () => {
-        this.playbackState.activeVoices.delete(voiceId);
-        source.disconnect();
-        voiceGain.disconnect();
-      };
-      
-      // Notify listeners
-      this.padTriggerListeners.forEach(listener => {
-        listener(padName, velocity, time);
-      });
-      
-    } catch (error) {
-      console.error('Failed to trigger pad with legacy method:', error);
-    }
-  }
+  // Legacy trigger methods removed - using pure Tone.js architecture
 
   /**
    * Check if a pad has a loaded sample
    */
   hasPadSample(padName: PadName): boolean {
-    if (this.playbackState.useToneJs) {
-      return toneDrumService.hasPadSample(padName);
-    }
-    return this.padSamples.has(padName);
+    return toneDrumService.hasPadSample(padName);
   }
 
   /**
-   * Get active voice information
+   * Get active voice count (Tone.js managed)
    */
-  get activeVoices(): Map<string, AudioBufferSourceNode> {
-    return this.playbackState.activeVoices;
+  get activeVoiceCount(): number {
+    return toneDrumService.getActiveVoiceCount();
   }
 
   /**
@@ -397,7 +240,7 @@ class PadTriggerService {
   private stopPatternPlayback(): void {
     this.playbackState.isPlaying = false;
     this.clearScheduledEvents();
-    this.stopAllVoices();
+    // Voice stopping now handled by Tone.js services
   }
 
   /**
@@ -457,80 +300,28 @@ class PadTriggerService {
   }
 
   /**
-   * Stop all currently playing voices
+   * All voice management now handled by Tone.js services
    */
-  private stopAllVoices(): void {
-    const context = audioService.getAudioContext();
-    if (!context) return;
-
-    for (const [voiceId, source] of this.playbackState.activeVoices) {
-      try {
-        source.stop(context.currentTime);
-      } catch (error) {
-        // Voice might already be stopped
-      }
-    }
-    
-    this.playbackState.activeVoices.clear();
-  }
 
   /**
-   * Set pad-specific gain
+   * Set pad-specific gain using Tone.js
    */
   setPadGain(padName: PadName, gain: number): void {
-    if (this.playbackState.useToneJs) {
-      toneDrumService.setPadGain(padName, gain);
-      return;
-    }
-
-    // Legacy Web Audio API implementation
-    const padGain = this.padGains.get(padName);
-    if (!padGain) return;
-
-    const context = audioService.getAudioContext();
-    if (!context) return;
-
-    const clampedGain = Math.max(0, Math.min(1, gain));
-    padGain.gain.setValueAtTime(clampedGain, context.currentTime);
+    toneDrumService.setPadGain(padName, gain);
   }
 
   /**
-   * Set pad-specific panning
+   * Set pad-specific panning using Tone.js
    */
   setPadPan(padName: PadName, pan: number): void {
-    if (this.playbackState.useToneJs) {
-      toneDrumService.setPadPan(padName, pan);
-      return;
-    }
-
-    // Legacy Web Audio API implementation
-    const padPanner = this.padPanners.get(padName);
-    if (!padPanner) return;
-
-    const context = audioService.getAudioContext();
-    if (!context) return;
-
-    const clampedPan = Math.max(-1, Math.min(1, pan));
-    padPanner.pan.setValueAtTime(clampedPan, context.currentTime);
+    toneDrumService.setPadPan(padName, pan);
   }
 
   /**
-   * Set master output gain
+   * Set master output gain using Tone.js
    */
   setMasterGain(gain: number): void {
-    if (this.playbackState.useToneJs) {
-      toneDrumService.setMasterGain(gain);
-      return;
-    }
-
-    // Legacy Web Audio API implementation
-    if (!this.outputGain) return;
-
-    const context = audioService.getAudioContext();
-    if (!context) return;
-
-    const clampedGain = Math.max(0, Math.min(1, gain));
-    this.outputGain.gain.setValueAtTime(clampedGain, context.currentTime);
+    toneDrumService.setMasterGain(gain);
   }
 
   /**
@@ -583,26 +374,13 @@ class PadTriggerService {
    * Destroy the service and clean up resources
    */
   destroy(): void {
-    this.stopAllVoices();
     this.clearScheduledEvents();
     
-    // Disconnect audio nodes
-    if (this.outputGain) {
-      this.outputGain.disconnect();
-      this.outputGain = null;
-    }
+    // Clear listeners
+    this.padTriggerListeners = [];
+    this.patternEventListeners = [];
     
-    for (const gainNode of this.padGains.values()) {
-      gainNode.disconnect();
-    }
-    
-    for (const pannerNode of this.padPanners.values()) {
-      pannerNode.disconnect();
-    }
-    
-    this.padGains.clear();
-    this.padPanners.clear();
-    this.padSamples.clear();
+    // Tone.js cleanup is handled by ToneDrumService
   }
 
   // Singleton pattern
