@@ -4,6 +4,7 @@
 import type { Sample, FactoryKit, FactoryContent, PadName, AudioError } from '../shared/models/index';
 import { audioService } from './audio-service';
 import { getDrumSample, getAllDrumSamples } from '../lib/audio/DrumSamples';
+import { musicRadarKitLoader, type MusicRadarKit } from './musicradar-kit-loader';
 
 interface LoadedSample extends Sample {
   loadedAt: number;
@@ -23,6 +24,7 @@ class SampleCache {
   private samples: Map<string, LoadedSample> = new Map();
   private loadingPromises: Map<string, Promise<LoadedSample>> = new Map();
   private factoryKits: Map<string, FactoryKit> = new Map();
+  private musicRadarKits: Map<string, MusicRadarKit> = new Map();
   private maxCacheSize: number = 200; // Maximum number of cached samples
   private maxMemoryMB: number = 500; // Maximum memory usage in MB
   private stats: CacheStats = {
@@ -484,6 +486,64 @@ class SampleCache {
   }
 
   /**
+   * Load an entire MusicRadar kit
+   */
+  async loadMusicRadarKit(kitId: string, preload: boolean = false): Promise<Map<PadName, LoadedSample>> {
+    try {
+      // Load kit data from MusicRadar kit loader
+      const kit = await musicRadarKitLoader.loadKit(kitId);
+      if (!kit) {
+        throw new Error(`MusicRadar kit not found: ${kitId}`);
+      }
+
+      // Cache the kit data
+      this.musicRadarKits.set(kitId, kit);
+
+      const samples = new Map<PadName, LoadedSample>();
+      const loadPromises: Promise<void>[] = [];
+
+      // Load each sample
+      for (const [padName, sampleData] of Object.entries(kit.samples)) {
+        if (!sampleData || !sampleData.primary) continue;
+
+        const promise = this.loadSample(sampleData.primary, {
+          kitId,
+          padName: padName as PadName,
+          preload
+        }).then(sample => {
+          samples.set(padName as PadName, sample);
+        }).catch(error => {
+          console.warn(`Failed to load ${padName} from MusicRadar kit ${kitId}:`, error);
+          // Don't fail the entire kit load if one sample fails
+        });
+        
+        loadPromises.push(promise);
+      }
+
+      await Promise.all(loadPromises);
+      
+      console.log(`✅ MusicRadar kit loaded: ${kit.name} (${samples.size} samples)`);
+      return samples;
+
+    } catch (error) {
+      console.error(`❌ Failed to load MusicRadar kit ${kitId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get MusicRadar kit sample mapping for Tone.js
+   */
+  async getMusicRadarKitSamples(kitId: string): Promise<Map<PadName, string> | null> {
+    try {
+      return await musicRadarKitLoader.getKitSampleMapping(kitId);
+    } catch (error) {
+      console.error(`Failed to get MusicRadar kit samples for ${kitId}:`, error);
+      return null;
+    }
+  }
+
+  /**
    * Get a cached sample
    */
   getSample(sampleUrl: string): LoadedSample | null {
@@ -500,6 +560,27 @@ class SampleCache {
    */
   getFactoryKits(): FactoryKit[] {
     return Array.from(this.factoryKits.values());
+  }
+
+  /**
+   * Get all available MusicRadar kits
+   */
+  getMusicRadarKits(): MusicRadarKit[] {
+    return musicRadarKitLoader.getAvailableKits();
+  }
+
+  /**
+   * Get MusicRadar kits by category
+   */
+  getMusicRadarKitsByCategory(category: 'acoustic' | 'electronic' | 'vinyl' | 'electro'): MusicRadarKit[] {
+    return musicRadarKitLoader.getKitsByCategory(category);
+  }
+
+  /**
+   * Search MusicRadar kits
+   */
+  searchMusicRadarKits(query: string): MusicRadarKit[] {
+    return musicRadarKitLoader.searchKits(query);
   }
 
   /**
@@ -525,7 +606,7 @@ class SampleCache {
       
       const samplesToRemove = samples.slice(0, samples.length - this.maxCacheSize);
       for (const sample of samplesToRemove) {
-        this.removeSample(sample.id);
+        this.removeSampleById(sample.id);
       }
     }
     
@@ -535,7 +616,7 @@ class SampleCache {
       samples.sort((a, b) => a.lastAccessed - b.lastAccessed);
       
       for (const sample of samples) {
-        this.removeSample(sample.id);
+        this.removeSampleById(sample.id);
         if (this.stats.totalMemoryMB <= this.maxMemoryMB * 0.8) {
           break;
         }
@@ -544,9 +625,9 @@ class SampleCache {
   }
 
   /**
-   * Remove a sample from cache
+   * Remove a sample from cache by ID
    */
-  private removeSample(sampleId: string): void {
+  private removeSampleById(sampleId: string): void {
     for (const [url, sample] of this.samples.entries()) {
       if (sample.id === sampleId) {
         this.samples.delete(url);

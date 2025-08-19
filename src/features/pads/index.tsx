@@ -6,18 +6,21 @@ import { useStore, usePadTrigger, useScheduler, useAudioService } from '../../co
 import { KitSelector } from '../../shared/ui/KitSelector.js';
 import { StepSequencer } from '../../shared/ui/StepSequencer.js';
 import { SwingQuantizeControls } from '../../shared/ui/SwingQuantizeControls.js';
+import { PadAssignment } from '../../shared/ui/PadAssignment.js';
 import { AIControls } from '../../components/AIControls';
 import type { PadName } from '../../shared/models/index.js';
 
 export const PadsView: React.FC = () => {
   const { actions } = useStore();
-  const { triggerPad, hasPadSample, activeVoices, currentKit, setKit } = usePadTrigger();
+  const { triggerPad, hasPadSample, activeVoices, currentKit, setKit, isLoading } = usePadTrigger();
   const { isPlaying, currentPosition } = useScheduler();
   const { audioState } = useAudioService();
   
   const [pressedPads, setPressedPads] = useState<Set<PadName>>(new Set());
   const [velocities, setVelocities] = useState<Map<PadName, number>>(new Map());
   const [keyboardEnabled, setKeyboardEnabled] = useState(true);
+  const [assignmentModalOpen, setAssignmentModalOpen] = useState(false);
+  const [selectedPadForAssignment, setSelectedPadForAssignment] = useState<PadName | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Pad layout with keyboard mappings
@@ -205,7 +208,8 @@ export const PadsView: React.FC = () => {
         `}
         onMouseDown={handleMouseDown}
         onTouchStart={handleTouchStart}
-        disabled={!isLoaded}
+        onContextMenu={(e) => handlePadRightClick(e, padName)}
+        disabled={!isLoaded || isLoading}
         aria-label={`Drum pad ${index + 1}: ${formatPadName(padName)} (Key: ${keyBinding})`}
       >
         {/* Velocity glow effect */}
@@ -262,13 +266,34 @@ export const PadsView: React.FC = () => {
     }
   }, []);
 
+  // Handle pad right-click for sound assignment
+  const handlePadRightClick = useCallback((e: React.MouseEvent, padName: PadName) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setSelectedPadForAssignment(padName);
+    setAssignmentModalOpen(true);
+  }, []);
+
+  // Handle sound assignment change
+  const handleAssignmentChange = useCallback((padName: PadName, sampleUrl: string) => {
+    console.log(`Assigned ${sampleUrl} to ${padName}`);
+    // The assignment is handled in the PadAssignment component
+    // We could add additional logic here if needed
+  }, []);
+
+  // Close assignment modal
+  const closeAssignmentModal = useCallback(() => {
+    setAssignmentModalOpen(false);
+    setSelectedPadForAssignment(null);
+  }, []);
+
   return (
     <div className="p-6 space-y-6" ref={containerRef}>
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold">Drum Pads</h2>
-          <p className="text-gray-400 text-sm">Click pads or use keyboard shortcuts • Hold Shift for high velocity</p>
+          <p className="text-gray-400 text-sm">Click pads or use keyboard shortcuts • Right-click to assign sounds • Hold Shift for high velocity</p>
         </div>
         <div className="flex items-center space-x-4 text-sm">
           <div>
@@ -304,6 +329,7 @@ export const PadsView: React.FC = () => {
           <KitSelector 
             selectedKit={currentKit}
             onKitChange={setKit}
+            isLoading={isLoading}
           />
         </div>
         
@@ -336,15 +362,27 @@ export const PadsView: React.FC = () => {
             </div>
             
             {/* 4x4 Drum Pad Grid */}
-            <div className="grid grid-cols-4 gap-3">
-              {padLayout.map((pad, index) => (
-                <EnhancedPad
-                  key={pad.padName}
-                  padName={pad.padName}
-                  keyBinding={pad.key}
-                  index={index}
-                />
-              ))}
+            <div className="relative">
+              <div className="grid grid-cols-4 gap-3">
+                {padLayout.map((pad, index) => (
+                  <EnhancedPad
+                    key={pad.padName}
+                    padName={pad.padName}
+                    keyBinding={pad.key}
+                    index={index}
+                  />
+                ))}
+              </div>
+              
+              {/* Loading Overlay */}
+              {isLoading && (
+                <div className="absolute inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center rounded">
+                  <div className="text-center">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-vibe-blue mx-auto mb-2"></div>
+                    <div className="text-sm text-gray-300">Loading kit...</div>
+                  </div>
+                </div>
+              )}
             </div>
             
             {/* Transport and Playback Info */}
@@ -395,6 +433,17 @@ export const PadsView: React.FC = () => {
           // userId={currentUser?.id} // TODO: Get from auth context
         />
       </div>
+
+      {/* Pad Assignment Modal */}
+      {selectedPadForAssignment && (
+        <PadAssignment
+          padName={selectedPadForAssignment}
+          currentKit={currentKit}
+          isOpen={assignmentModalOpen}
+          onClose={closeAssignmentModal}
+          onAssignmentChange={handleAssignmentChange}
+        />
+      )}
     </div>
   );
 };

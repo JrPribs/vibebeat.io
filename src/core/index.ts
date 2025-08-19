@@ -76,6 +76,14 @@ export {
 } from './tone-mixer-service';
 
 export {
+  toneDrumService
+} from './tone-drum-service';
+
+export {
+  musicRadarKitLoader
+} from './musicradar-kit-loader';
+
+export {
   useMixer
 } from './use-mixer';
 

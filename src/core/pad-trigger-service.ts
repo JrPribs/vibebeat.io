@@ -5,6 +5,7 @@ import type { Sample, PadName, DrumTrack, ScheduledEvent } from '../shared/model
 import { audioService } from './audio-service';
 import { sampleCache } from './sample-cache';
 import { schedulerService } from './scheduler-service';
+import { toneDrumService } from './tone-drum-service';
 
 interface PadTriggerOptions {
   velocity?: number; // 0-127
@@ -17,7 +18,9 @@ interface PlaybackState {
   isPlaying: boolean;
   currentPattern: DrumTrack | null;
   scheduledEvents: ScheduledEvent[];
-  activeVoices: Map<string, AudioBufferSourceNode>;
+  activeVoices: Map<string, AudioBufferSourceNode>; // Legacy compatibility
+  currentKit: string | null;
+  useToneJs: boolean; // Flag to enable Tone.js integration
 }
 
 class PadTriggerService {
@@ -25,7 +28,9 @@ class PadTriggerService {
     isPlaying: false,
     currentPattern: null,
     scheduledEvents: [],
-    activeVoices: new Map()
+    activeVoices: new Map(),
+    currentKit: null,
+    useToneJs: true // Default to Tone.js for new implementations
   };
   
   private padSamples: Map<PadName, Sample> = new Map();
@@ -38,8 +43,14 @@ class PadTriggerService {
   private patternEventListeners: ((event: ScheduledEvent) => void)[] = [];
 
   constructor() {
-    // Try to set up audio nodes immediately, but also listen for audio initialization
+    console.log('PadTriggerService: Initializing with Tone.js integration');
+    
+    // Initialize Tone.js drum service
+    this.initializeToneJsService();
+    
+    // Set up legacy Web Audio API nodes for fallback
     this.setupAudioNodes();
+    
     // Defer scheduler integration to avoid initialization race conditions
     setTimeout(() => this.setupSchedulerIntegration(), 0);
     
@@ -49,6 +60,26 @@ class PadTriggerService {
         this.setupAudioNodes();
       }
     });
+  }
+
+  /**
+   * Initialize Tone.js drum service
+   */
+  private async initializeToneJsService(): Promise<void> {
+    try {
+      await toneDrumService.initialize();
+      console.log('✅ PadTriggerService: Tone.js integration ready');
+      
+      // Load a default MusicRadar kit
+      await this.loadMusicRadarKit('musicradar-acoustic-01-close');
+      
+      // Notify that samples are loaded and UI should update
+      this.notifyStateChange();
+      
+    } catch (error) {
+      console.error('❌ PadTriggerService: Tone.js initialization failed, falling back to legacy mode:', error);
+      this.playbackState.useToneJs = false;
+    }
   }
 
   /**
@@ -146,7 +177,7 @@ class PadTriggerService {
   }
 
   /**
-   * Load samples for a specific kit
+   * Load samples for a specific kit (legacy factory kits)
    */
   async loadKitSamples(kitId: string): Promise<void> {
     try {
@@ -157,10 +188,38 @@ class PadTriggerService {
         this.padSamples.set(padName as PadName, sample);
       }
       
+      this.playbackState.currentKit = kitId;
       console.log(`Loaded ${samples.size} pad samples for kit: ${kitId}`);
       
     } catch (error) {
       console.error('Failed to load kit samples:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Load MusicRadar kit with Tone.js integration
+   */
+  async loadMusicRadarKit(kitId: string): Promise<void> {
+    try {
+      if (!this.playbackState.useToneJs) {
+        throw new Error('Tone.js not available, cannot load MusicRadar kit');
+      }
+
+      // Get sample mapping from cache/loader
+      const sampleMapping = await sampleCache.getMusicRadarKitSamples(kitId);
+      if (!sampleMapping) {
+        throw new Error(`Failed to get sample mapping for kit: ${kitId}`);
+      }
+
+      // Load samples into Tone.js drum service
+      await toneDrumService.loadKitSamples(kitId, sampleMapping);
+      
+      this.playbackState.currentKit = kitId;
+      console.log(`✅ Loaded MusicRadar kit: ${kitId} (${sampleMapping.size} samples)`);
+      
+    } catch (error) {
+      console.error(`❌ Failed to load MusicRadar kit ${kitId}:`, error);
       throw error;
     }
   }
@@ -186,6 +245,38 @@ class PadTriggerService {
    * Trigger a drum pad manually or programmatically
    */
   triggerPad(padName: PadName, velocity: number = 127): void {
+    // Use Tone.js if available, otherwise fallback to legacy Web Audio API
+    if (this.playbackState.useToneJs) {
+      this.triggerPadWithToneJs(padName, velocity);
+    } else {
+      this.triggerPadLegacy(padName, velocity);
+    }
+  }
+
+  /**
+   * Trigger pad using Tone.js (preferred method)
+   */
+  private async triggerPadWithToneJs(padName: PadName, velocity: number = 127): Promise<void> {
+    try {
+      await toneDrumService.triggerPad(padName, velocity);
+      
+      // Notify listeners with current time
+      const currentTime = Date.now() / 1000; // Convert to seconds
+      this.padTriggerListeners.forEach(listener => {
+        listener(padName, velocity, currentTime);
+      });
+      
+    } catch (error) {
+      console.error(`Failed to trigger pad ${padName} with Tone.js:`, error);
+      // Fallback to legacy method if Tone.js fails
+      this.triggerPadLegacy(padName, velocity);
+    }
+  }
+
+  /**
+   * Trigger pad using legacy Web Audio API (fallback method)
+   */
+  private triggerPadLegacy(padName: PadName, velocity: number = 127): void {
     const context = audioService.getAudioContext();
     if (!context) {
       console.warn('AudioContext not available. Please enable audio to play sounds.');
@@ -253,7 +344,7 @@ class PadTriggerService {
       });
       
     } catch (error) {
-      console.error('Failed to trigger pad:', error);
+      console.error('Failed to trigger pad with legacy method:', error);
     }
   }
 
@@ -261,6 +352,9 @@ class PadTriggerService {
    * Check if a pad has a loaded sample
    */
   hasPadSample(padName: PadName): boolean {
+    if (this.playbackState.useToneJs) {
+      return toneDrumService.hasPadSample(padName);
+    }
     return this.padSamples.has(padName);
   }
 
@@ -384,6 +478,12 @@ class PadTriggerService {
    * Set pad-specific gain
    */
   setPadGain(padName: PadName, gain: number): void {
+    if (this.playbackState.useToneJs) {
+      toneDrumService.setPadGain(padName, gain);
+      return;
+    }
+
+    // Legacy Web Audio API implementation
     const padGain = this.padGains.get(padName);
     if (!padGain) return;
 
@@ -398,6 +498,12 @@ class PadTriggerService {
    * Set pad-specific panning
    */
   setPadPan(padName: PadName, pan: number): void {
+    if (this.playbackState.useToneJs) {
+      toneDrumService.setPadPan(padName, pan);
+      return;
+    }
+
+    // Legacy Web Audio API implementation
     const padPanner = this.padPanners.get(padName);
     if (!padPanner) return;
 
@@ -412,6 +518,12 @@ class PadTriggerService {
    * Set master output gain
    */
   setMasterGain(gain: number): void {
+    if (this.playbackState.useToneJs) {
+      toneDrumService.setMasterGain(gain);
+      return;
+    }
+
+    // Legacy Web Audio API implementation
     if (!this.outputGain) return;
 
     const context = audioService.getAudioContext();
@@ -453,6 +565,18 @@ class PadTriggerService {
       const index = this.patternEventListeners.indexOf(listener);
       if (index > -1) this.patternEventListeners.splice(index, 1);
     };
+  }
+
+  /**
+   * Notify listeners of state changes (for UI updates)
+   */
+  private notifyStateChange(): void {
+    // Force UI re-render by emitting a state change event
+    // This ensures that hasPadSample() checks get re-evaluated
+    console.log('🔄 Notifying UI of kit loaded state change');
+    
+    // We'll add state change listeners later
+    // For now, rely on React's state updates in the hook
   }
 
   /**
