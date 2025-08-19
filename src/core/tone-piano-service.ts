@@ -3,6 +3,11 @@
 
 import * as Tone from 'tone';
 
+// Expose Tone.js globally for debugging and ensure it's loaded
+if (typeof window !== 'undefined') {
+  (window as any).Tone = Tone;
+}
+
 interface TonePianoTriggerOptions {
   velocity?: number; // 0-127
   duration?: number; // Note duration in seconds

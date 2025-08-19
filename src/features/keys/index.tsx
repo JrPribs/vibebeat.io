@@ -145,7 +145,8 @@ export const KeysView: React.FC = () => {
     // Play the note with Tone.js piano synthesis
     const note = notes.find(n => n.midiNumber === midiNumber);
     if (note) {
-      const noteWithOctave = `${note.note}${note.octave}`;
+      // note.note already contains the full note name like "C4"
+      const noteName = note.note;
       
       // Start Tone.js if needed and trigger note
       const playNote = async () => {
@@ -153,8 +154,8 @@ export const KeysView: React.FC = () => {
           if (Tone.context.state !== 'running') {
             await Tone.start();
           }
-          await tonePianoService.triggerNote(noteWithOctave, velocity);
-          console.log(`Playing note: ${noteWithOctave} (${midiNumber}) velocity: ${velocity}`);
+          await tonePianoService.triggerNote(noteName, velocity);
+          console.log(`Playing note: ${noteName} (${midiNumber}) velocity: ${velocity}`);
         } catch (error) {
           console.error('Failed to play note:', error);
         }
@@ -206,10 +207,11 @@ export const KeysView: React.FC = () => {
     // Release the note with Tone.js piano synthesis
     const note = notes.find(n => n.midiNumber === midiNumber);
     if (note) {
-      const noteWithOctave = `${note.note}${note.octave}`;
+      // note.note already contains the full note name like "C4"
+      const noteName = note.note;
       try {
-        tonePianoService.releaseNote(noteWithOctave);
-        console.log(`Released note: ${noteWithOctave}`);
+        tonePianoService.releaseNote(noteName);
+        console.log(`Released note: ${noteName}`);
       } catch (error) {
         console.error('Failed to release note:', error);
       }

@@ -5,6 +5,9 @@ import { useEffect, useCallback, useRef } from 'react';
 import { useStore } from './store-context';
 import { audioService } from './audio-service';
 import { schedulerService } from './scheduler-service';
+import { tonePianoService } from './tone-piano-service';
+import { toneMixerService } from './tone-mixer-service';
+import * as Tone from 'tone';
 import type { AudioContextState, AudioError, PerformanceMetrics } from '../shared/models/index';
 
 export const useAudioService = () => {
@@ -21,7 +24,18 @@ export const useAudioService = () => {
       try {
         actions.setLoading(true);
         
-        // Initialize AudioService first
+        // Initialize Tone.js first (requires user interaction)
+        if (Tone.context.state !== 'running') {
+          console.log('Starting Tone.js context...');
+          await Tone.start();
+          console.log('Tone.js context started successfully');
+        }
+        
+        // Initialize Tone services
+        await tonePianoService.initialize();
+        await toneMixerService.initialize();
+        
+        // Initialize AudioService
         await audioService.initialize(state.audio.latencyMode);
         
         // Initialize SchedulerService after AudioService is ready
@@ -141,7 +155,18 @@ export const useAudioService = () => {
     try {
       actions.setLoading(true);
       
-      // Initialize AudioService first
+      // Initialize Tone.js first (requires user interaction)
+      if (Tone.context.state !== 'running') {
+        console.log('Starting Tone.js context manually...');
+        await Tone.start();
+        console.log('Tone.js context started successfully');
+      }
+      
+      // Initialize Tone services
+      await tonePianoService.initialize();
+      await toneMixerService.initialize();
+      
+      // Initialize AudioService
       await audioService.initialize(state.audio.latencyMode);
       
       // Initialize SchedulerService after AudioService is ready
