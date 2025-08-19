@@ -46,6 +46,8 @@ The audio engine follows a singleton pattern with these core services:
 4. **SampleCache** (`src/core/sample-cache.ts`) - AudioBuffer management and factory kit loading
 5. **MixerService** (`src/core/mixer-service.ts`) - Channel mixing and effects
 6. **RecordingService** (`src/core/recording-service.ts`) - Microphone recording with bar-sync
+7. **TonePianoService** (`src/core/tone-piano-service.ts`) - **ACTIVE** Professional piano synthesis via Tone.js PolySynth
+8. **ToneMixerService** (`src/core/tone-mixer-service.ts`) - **ACTIVE** Professional mixing with Tone.js Channel and effects
 
 ### AudioWorklet Architecture
 - **Critical**: Uses `public/audio-worklet-scheduler.js` for sample-accurate timing
@@ -74,11 +76,18 @@ Features are organized by function in `src/features/` with single-file component
 ### Feature Integration Pattern
 All features follow consistent integration:
 ```typescript
-import { useStore, useAudioService, useScheduler } from '../../core/index.js';
+import { useStore, useAudioService, useScheduler, tonePianoService } from '../../core/index.js';
+import Tone from 'tone'; // Default import pattern for Tone.js
 
 const { actions } = useStore();
 const { audioState } = useAudioService();  
 const { isPlaying, currentPosition } = useScheduler();
+
+// For piano features, also initialize Tone.js
+if (Tone.context.state !== 'running') {
+  await Tone.start();
+}
+await tonePianoService.triggerNote('C4', 100);
 ```
 
 ## Data Models and Validation
@@ -98,9 +107,18 @@ const { isPlaying, currentPosition } = useScheduler();
 
 ### Initialization Sequence
 1. User interaction triggers audio system (Web Audio policy requirement)
-2. AudioContext creation with optimal settings (low/stable latency modes)
-3. AudioWorklet processor loading from `public/audio-worklet-scheduler.js`
-4. Service interconnection and factory kit preloading
+2. **Tone.js context startup** (`await Tone.start()`) - Must happen first
+3. **TonePianoService and ToneMixerService initialization** - Professional audio services
+4. AudioContext creation with optimal settings (low/stable latency modes)
+5. AudioWorklet processor loading from `public/audio-worklet-scheduler.js`
+6. Service interconnection and factory kit preloading
+
+### **CRITICAL: Tone.js Integration (August 2025)**
+- **Status**: ✅ FULLY FUNCTIONAL - Piano keyboard producing professional audio
+- **Version**: Tone.js v15.1.22 with default import pattern
+- **Import Pattern**: `import Tone from 'tone'` (NOT `import * as Tone`)
+- **Global Access**: Tone.js exposed as `window.Tone` for debugging
+- **Architecture**: Hybrid approach - Tone.js for synthesis, custom services for sequencing
 
 ### Timing and Synchronization
 - **Resolution**: 16th note steps (4 steps per beat)
@@ -114,6 +132,9 @@ const { isPlaying, currentPosition } = useScheduler();
 User Input → Store Actions → Service Updates → AudioWorklet → Audio Output
                         ↓
 Sample Cache ← Factory Kits ← PadTriggerService ← Scheduler Events
+
+PIANO SYNTHESIS (Tone.js):
+User Input → TonePianoService → Tone.PolySynth → ToneMixerService → Audio Output
 ```
 
 ## Supabase Integration
@@ -184,6 +205,8 @@ Sample Cache ← Factory Kits ← PadTriggerService ← Scheduler Events
 2. Integrate with core services via hooks
 3. Update store actions and state if needed
 4. Follow singleton service pattern for audio processing
+5. **For synthesis features**: Use Tone.js services (TonePianoService, ToneMixerService)
+6. **For sample playback**: Use custom services (PadTriggerService, SampleCache)
 
 ### Modifying Audio Timing
 - Always work through SchedulerService
@@ -194,3 +217,24 @@ Sample Cache ← Factory Kits ← PadTriggerService ← Scheduler Events
 - Extend SampleCache for loading
 - Update PadTriggerService for playback
 - Follow factory kit organization pattern
+
+### **Tone.js Development Guidelines**
+- **Import Pattern**: Always use `import Tone from 'tone'` (default import)
+- **Context Management**: Always check `Tone.context.state` before use
+- **Initialization**: Call `await Tone.start()` after user interaction
+- **Service Pattern**: Create singleton services extending Tone.js functionality
+- **Error Handling**: Wrap Tone.js calls in try/catch blocks
+- **Performance**: Use Tone.js built-in disposal methods for cleanup
+
+### **Piano Keyboard Development**
+- **Working Implementation**: `/src/features/keys/index.tsx` (REFERENCE)
+- **Note Format**: Use standard note names like "C4", "D#4" (not concatenation)
+- **Velocity Range**: MIDI velocity 0-127, converted to linear 0-1 for Tone.js
+- **Polyphony**: Handled automatically by Tone.PolySynth
+- **UI Layout**: Black keys use absolute positioning with proper z-index
+
+### **Audio Status and User Interaction**
+- **Modal Pattern**: AudioProvider manages "Enable Audio" overlay
+- **Status Display**: Check `audioState.isInitialized` for UI feedback
+- **Auto-close**: Modal should hide after successful initialization
+- **Error Handling**: Show user-friendly error messages for audio failures
