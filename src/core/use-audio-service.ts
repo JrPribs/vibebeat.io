@@ -22,7 +22,7 @@ export const useAudioService = () => {
 
     const initializeAudio = async () => {
       try {
-        actions.setLoading(true);
+        dispatch({ type: 'SET_AUDIO', payload: { isLoading: true } });
         
         // Initialize Tone.js first (requires user interaction)
         if (Tone.context.state !== 'running') {
@@ -47,13 +47,18 @@ export const useAudioService = () => {
           // Audio still works without scheduler, but timing won't be sample-accurate
         }
         
-        actions.setLoading(false);
+        dispatch({ type: 'SET_AUDIO', payload: { isLoading: false } });
         userInteractionRef.current = true;
       } catch (error) {
         console.error('Failed to initialize audio service:', error);
         const errorMessage = error instanceof Error ? error.message : 'Unknown audio error';
-        actions.setError(`Failed to initialize audio system: ${errorMessage}. Please click "Enable Audio" to try again.`);
-        actions.setLoading(false);
+        dispatch({ 
+          type: 'SET_AUDIO', 
+          payload: { 
+            error: `Failed to initialize audio system: ${errorMessage}. Please click "Enable Audio" to try again.`,
+            isLoading: false
+          }
+        });
       }
     };
 
@@ -63,7 +68,10 @@ export const useAudioService = () => {
     });
 
     const unsubscribeError = audioService.onError((error: AudioError) => {
-      actions.setError(`Audio Error: ${error.message}`);
+      dispatch({ 
+        type: 'SET_AUDIO', 
+        payload: { error: `Audio Error: ${error.message}` }
+      });
     });
 
     const unsubscribeLatency = audioService.onLatencyUpdate((latency: number) => {
@@ -95,7 +103,7 @@ export const useAudioService = () => {
       document.removeEventListener('keydown', handleUserInteraction);
       document.removeEventListener('touchstart', handleUserInteraction);
     };
-  }, [actions, state.audio.latencyMode]);
+  }, [dispatch, state.audio.latencyMode]);
 
   // Handle latency mode changes
   useEffect(() => {
@@ -104,14 +112,17 @@ export const useAudioService = () => {
         await audioService.setLatencyMode(state.audio.latencyMode);
       } catch (error) {
         console.error('Failed to change latency mode:', error);
-        actions.setError('Failed to change audio latency mode');
+        dispatch({ 
+          type: 'SET_AUDIO', 
+          payload: { error: 'Failed to change audio latency mode' }
+        });
       }
     };
 
     if (audioService.getState().context) {
       updateLatencyMode();
     }
-  }, [state.audio.latencyMode, actions]);
+  }, [state.audio.latencyMode, dispatch]);
 
   // Audio control functions
   const resumeAudio = useCallback(async () => {
@@ -119,18 +130,24 @@ export const useAudioService = () => {
       await audioService.resume();
     } catch (error) {
       console.error('Failed to resume audio:', error);
-      actions.setError('Failed to resume audio');
+      dispatch({ 
+        type: 'SET_AUDIO', 
+        payload: { error: 'Failed to resume audio' }
+      });
     }
-  }, [actions]);
+  }, [dispatch]);
 
   const suspendAudio = useCallback(async () => {
     try {
       await audioService.suspend();
     } catch (error) {
       console.error('Failed to suspend audio:', error);
-      actions.setError('Failed to suspend audio');
+      dispatch({ 
+        type: 'SET_AUDIO', 
+        payload: { error: 'Failed to suspend audio' }
+      });
     }
-  }, [actions]);
+  }, [dispatch]);
 
   const getPerformanceMetrics = useCallback((): PerformanceMetrics => {
     return audioService.getPerformanceMetrics();
@@ -153,7 +170,7 @@ export const useAudioService = () => {
     if (userInteractionRef.current) return; // Already initialized
     
     try {
-      actions.setLoading(true);
+      dispatch({ type: 'SET_AUDIO', payload: { isLoading: true } });
       
       // Initialize Tone.js first (requires user interaction)
       if (Tone.context.state !== 'running') {
@@ -178,14 +195,19 @@ export const useAudioService = () => {
         // Audio still works without scheduler, but timing won't be sample-accurate
       }
       
-      actions.setLoading(false);
+      dispatch({ type: 'SET_AUDIO', payload: { isLoading: false } });
       userInteractionRef.current = true;
     } catch (error) {
       console.error('Failed to initialize audio service manually:', error);
-      actions.setError('Failed to initialize audio system. Check if your browser supports Web Audio API.');
-      actions.setLoading(false);
+      dispatch({ 
+        type: 'SET_AUDIO', 
+        payload: { 
+          error: 'Failed to initialize audio system. Check if your browser supports Web Audio API.',
+          isLoading: false
+        }
+      });
     }
-  }, [actions, state.audio.latencyMode]);
+  }, [dispatch, state.audio.latencyMode]);
 
   return {
     audioService,

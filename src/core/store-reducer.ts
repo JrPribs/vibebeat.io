@@ -80,6 +80,17 @@ export const appStateReducer = (state: AppState, action: AppAction): AppState =>
       };
     }
 
+    case 'UPDATE_PROJECT': {
+      return {
+        ...state,
+        project: {
+          ...state.project,
+          ...action.payload,
+          updatedAt: Date.now()
+        }
+      };
+    }
+
     case 'ADD_TRACK': {
       const updatedProject = {
         ...state.project,
@@ -131,6 +142,16 @@ export const appStateReducer = (state: AppState, action: AppAction): AppState =>
         transport: {
           ...state.transport,
           ...action.payload
+        }
+      };
+    }
+
+    case 'TOGGLE_METRONOME': {
+      return {
+        ...state,
+        transport: {
+          ...state.transport,
+          metronomeEnabled: !state.transport.metronomeEnabled
         }
       };
     }
@@ -203,6 +224,14 @@ export const appStateReducer = (state: AppState, action: AppAction): AppState =>
         ...state,
         undoStack: [],
         redoStack: []
+      };
+    }
+
+    case 'UPDATE_UNDO_STACKS': {
+      return {
+        ...state,
+        undoStack: action.payload.undoStack,
+        redoStack: action.payload.redoStack
       };
     }
 

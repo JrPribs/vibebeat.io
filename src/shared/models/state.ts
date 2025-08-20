@@ -19,14 +19,17 @@ export interface AppState {
 // Action Types for State Management
 export type AppAction = 
   | { type: 'SET_PROJECT'; payload: Project }
+  | { type: 'UPDATE_PROJECT'; payload: Partial<Project> }
   | { type: 'UPDATE_TRACK'; payload: { trackId: string; track: Partial<Track> } }
   | { type: 'ADD_TRACK'; payload: Track }
   | { type: 'REMOVE_TRACK'; payload: string }
   | { type: 'SET_TRANSPORT'; payload: Partial<TransportState> }
+  | { type: 'TOGGLE_METRONOME' }
   | { type: 'SET_SELECTION'; payload: Partial<SelectionState> }
   | { type: 'SET_UI'; payload: Partial<UIState> }
   | { type: 'SET_AUDIO'; payload: Partial<AudioContextState> }
   | { type: 'TOGGLE_HELP' }
   | { type: 'UNDO' }
   | { type: 'REDO' }
-  | { type: 'CLEAR_UNDO_HISTORY' };
+  | { type: 'CLEAR_UNDO_HISTORY' }
+  | { type: 'UPDATE_UNDO_STACKS'; payload: { undoStack: Project[]; redoStack: Project[] } };

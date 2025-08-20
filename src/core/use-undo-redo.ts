@@ -9,6 +9,7 @@ const UNDO_STACK_LIMIT = 50;
 // Actions that should create undo history
 const UNDOABLE_ACTIONS = new Set([
   'SET_PROJECT',
+  'UPDATE_PROJECT',
   'ADD_TRACK',
   'REMOVE_TRACK',
   'UPDATE_TRACK'
@@ -19,6 +20,8 @@ export const useUndoRedo = (
   dispatch: React.Dispatch<AppAction>
 ) => {
   const isUndoRedoAction = useRef(false);
+  const stateRef = useRef(state);
+  stateRef.current = state;
 
   const enhancedDispatch = useCallback((action: AppAction) => {
     // Handle undo/redo actions directly
@@ -38,23 +41,14 @@ export const useUndoRedo = (
         newUndoStack.shift();
       }
 
-      // Clear redo stack when new action is performed
+      // Update undo/redo stacks before dispatching the main action
       dispatch({
-        type: 'SET_PROJECT',
+        type: 'UPDATE_UNDO_STACKS',
         payload: {
-          ...state.project,
-          // This will be overridden by the actual action
+          undoStack: newUndoStack,
+          redoStack: [] // Clear redo stack when new action is performed
         }
       });
-      
-      // Update undo/redo stacks
-      const undoAction: AppAction = {
-        type: 'CLEAR_UNDO_HISTORY'
-      };
-      
-      // Temporarily store the undo stack update
-      state.undoStack = newUndoStack;
-      state.redoStack = [];
     }
 
     // Reset the flag
@@ -62,7 +56,7 @@ export const useUndoRedo = (
     
     // Dispatch the original action
     dispatch(action);
-  }, [state, dispatch]);
+  }, [state.undoStack, state.project, dispatch]);
 
   const undo = useCallback(() => {
     isUndoRedoAction.current = true;

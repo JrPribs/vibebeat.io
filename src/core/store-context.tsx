@@ -86,10 +86,10 @@ export const StoreProvider: React.FC<StoreProviderProps> = ({
 
   const updateProject = useCallback((updates: Partial<Project>) => {
     enhancedDispatch({ 
-      type: 'SET_PROJECT', 
-      payload: { ...state.project, ...updates, updatedAt: Date.now() }
+      type: 'UPDATE_PROJECT', 
+      payload: updates
     });
-  }, [enhancedDispatch, state.project]);
+  }, [enhancedDispatch]);
 
   // Transport actions
   const play = useCallback(() => {
@@ -122,20 +122,19 @@ export const StoreProvider: React.FC<StoreProviderProps> = ({
   const setBpm = useCallback((bpm: number) => {
     // Update both transport and project
     enhancedDispatch({ type: 'SET_TRANSPORT', payload: { bpm } });
-    updateProject({ tempoBpm: bpm });
-  }, [enhancedDispatch, updateProject]);
+    enhancedDispatch({ type: 'UPDATE_PROJECT', payload: { tempoBpm: bpm } });
+  }, [enhancedDispatch]);
 
   const setSwing = useCallback((swingPercent: number) => {
     enhancedDispatch({ type: 'SET_TRANSPORT', payload: { swingPercent } });
-    updateProject({ swingPercent });
-  }, [enhancedDispatch, updateProject]);
+    enhancedDispatch({ type: 'UPDATE_PROJECT', payload: { swingPercent } });
+  }, [enhancedDispatch]);
 
   const toggleMetronome = useCallback(() => {
     enhancedDispatch({ 
-      type: 'SET_TRANSPORT', 
-      payload: { metronomeEnabled: !state.transport.metronomeEnabled }
+      type: 'TOGGLE_METRONOME'
     });
-  }, [enhancedDispatch, state.transport.metronomeEnabled]);
+  }, [enhancedDispatch]);
 
   // Track actions
   const addTrack = useCallback((track: any) => {

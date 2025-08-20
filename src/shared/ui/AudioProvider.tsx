@@ -31,15 +31,11 @@ interface AudioProviderProps {
 
 export const AudioProvider: React.FC<AudioProviderProps> = ({ children }) => {
   const audioService = useAudioService();
-  const [showEnableAudio, setShowEnableAudio] = useState(false);
+  const [showEnableAudio, setShowEnableAudio] = useState(true); // Start with true
   
   // Show "Enable Audio" overlay if audio needs user interaction
   useEffect(() => {
-    // Check if we need to show the enable audio overlay
-    const needsUserInteraction = !audioService.hasUserInteracted && !audioService.isInitialized;
-    setShowEnableAudio(needsUserInteraction);
-    
-    // Auto-hide modal when audio is successfully initialized
+    // Only hide the modal when audio is successfully initialized
     if (audioService.isInitialized && audioService.hasUserInteracted) {
       setShowEnableAudio(false);
     }
