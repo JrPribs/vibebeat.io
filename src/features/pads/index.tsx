@@ -2,7 +2,7 @@
 // 4x4 drum pads with keyboard mappings, velocity control, and step sequencer
 
 import React, { useEffect, useCallback, useState, useRef } from 'react';
-import { useStore, usePadTrigger, useToneTransport, useAudioService } from '../../core/index.js';
+import { useStore, usePadTrigger, useToneTransport, useAudioService, toneDrumService } from '../../core/index.js';
 import { KitSelector } from '../../shared/ui/KitSelector.js';
 import { StepSequencer } from '../../shared/ui/StepSequencer.js';
 import { SwingQuantizeControls } from '../../shared/ui/SwingQuantizeControls.js';
@@ -18,6 +18,8 @@ export const PadsView: React.FC = () => {
   
   const [pressedPads, setPressedPads] = useState<Set<PadName>>(new Set());
   const [velocities, setVelocities] = useState<Map<PadName, number>>(new Map());
+  const [padVolumes, setPadVolumes] = useState<Map<PadName, number>>(new Map());
+  const [showVolumeControls, setShowVolumeControls] = useState(false);
   const [keyboardEnabled, setKeyboardEnabled] = useState(true);
   const [assignmentModalOpen, setAssignmentModalOpen] = useState(false);
   const [selectedPadForAssignment, setSelectedPadForAssignment] = useState<PadName | null>(null);
@@ -107,6 +109,28 @@ export const PadsView: React.FC = () => {
     }, 50);
   }, [triggerPad]);
 
+  // Handle pad volume change
+  const handlePadVolumeChange = useCallback((padName: PadName, volume: number) => {
+    const normalizedVolume = volume / 100; // Convert 0-100 to 0-1
+    setPadVolumes(prev => new Map([...prev, [padName, volume]]));
+    toneDrumService.setPadGain(padName, normalizedVolume);
+  }, []);
+
+  // Initialize default volumes when kit changes
+  useEffect(() => {
+    if (currentKit) {
+      // Set default volume to 80% for all pads
+      const defaultVolumes = new Map<PadName, number>();
+      padLayout.forEach(({ padName }) => {
+        if (hasPadSample(padName)) {
+          defaultVolumes.set(padName, 80);
+          toneDrumService.setPadGain(padName, 0.8);
+        }
+      });
+      setPadVolumes(defaultVolumes);
+    }
+  }, [currentKit, hasPadSample]);
+
   // Set up keyboard listeners
   useEffect(() => {
     if (!keyboardEnabled) return;
@@ -120,7 +144,7 @@ export const PadsView: React.FC = () => {
     };
   }, [handleKeyDown, handleKeyUp, keyboardEnabled]);
 
-  // Enhanced pad component with velocity-based visuals
+  // Enhanced pad component with velocity-based visuals and volume controls
   const EnhancedPad: React.FC<{
     padName: PadName;
     keyBinding: string;
@@ -129,6 +153,7 @@ export const PadsView: React.FC = () => {
     const isPressed = pressedPads.has(padName);
     const velocity = velocities.get(padName) || 0;
     const isLoaded = hasPadSample(padName);
+    const volume = padVolumes.get(padName) || 80;
     
     const handleMouseDown = useCallback((e: React.MouseEvent) => {
       e.preventDefault();
@@ -252,11 +277,33 @@ export const PadsView: React.FC = () => {
         )}
         
         {/* Status indicator - only show for loaded pads */}
-        {isLoaded && (
+        {isLoaded && !showVolumeControls && (
           <div className="mt-1 z-10">
             <div className={`w-2 h-2 rounded-full ${
               isPressed ? 'bg-white' : 'bg-green-500'
             }`}></div>
+          </div>
+        )}
+
+        {/* Volume Control Overlay */}
+        {isLoaded && showVolumeControls && (
+          <div 
+            className="absolute inset-0 bg-black bg-opacity-80 flex flex-col items-center justify-center rounded-lg z-20"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="text-xs text-white mb-2">VOL</div>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              value={volume}
+              onChange={(e) => handlePadVolumeChange(padName, parseInt(e.target.value))}
+              className="w-16 h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer slider"
+              style={{
+                background: `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${volume}%, #4b5563 ${volume}%, #4b5563 100%)`
+              }}
+            />
+            <div className="text-xs text-white mt-1">{volume}%</div>
           </div>
         )}
       </button>
@@ -296,6 +343,28 @@ export const PadsView: React.FC = () => {
 
   return (
     <div className="p-6 space-y-6" ref={containerRef}>
+      {/* CSS for custom slider styling */}
+      <style jsx>{`
+        .slider::-webkit-slider-thumb {
+          appearance: none;
+          height: 16px;
+          width: 16px;
+          border-radius: 50%;
+          background: #3b82f6;
+          cursor: pointer;
+          border: 2px solid #ffffff;
+          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+        }
+        .slider::-moz-range-thumb {
+          height: 16px;
+          width: 16px;
+          border-radius: 50%;
+          background: #3b82f6;
+          cursor: pointer;
+          border: 2px solid #ffffff;
+          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+        }
+      `}</style>
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -313,18 +382,33 @@ export const PadsView: React.FC = () => {
             <span className="text-gray-400">Active Voices:</span>
             <span className="text-vibe-purple ml-2 font-medium">{activeVoices.size}</span>
           </div>
-          <div className="flex items-center space-x-2">
-            <span className="text-gray-400">Keyboard:</span>
-            <button
-              onClick={() => setKeyboardEnabled(!keyboardEnabled)}
-              className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
-                keyboardEnabled 
-                  ? 'bg-vibe-blue text-white' 
-                  : 'bg-gray-600 text-gray-300 hover:bg-gray-500'
-              }`}
-            >
-              {keyboardEnabled ? 'ON' : 'OFF'}
-            </button>
+          <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-2">
+              <span className="text-gray-400">Keyboard:</span>
+              <button
+                onClick={() => setKeyboardEnabled(!keyboardEnabled)}
+                className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+                  keyboardEnabled 
+                    ? 'bg-vibe-blue text-white' 
+                    : 'bg-gray-600 text-gray-300 hover:bg-gray-500'
+                }`}
+              >
+                {keyboardEnabled ? 'ON' : 'OFF'}
+              </button>
+            </div>
+            <div className="flex items-center space-x-2">
+              <span className="text-gray-400">Volume:</span>
+              <button
+                onClick={() => setShowVolumeControls(!showVolumeControls)}
+                className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+                  showVolumeControls 
+                    ? 'bg-vibe-purple text-white' 
+                    : 'bg-gray-600 text-gray-300 hover:bg-gray-500'
+                }`}
+              >
+                {showVolumeControls ? 'HIDE' : 'SHOW'}
+              </button>
+            </div>
           </div>
         </div>
       </div>
