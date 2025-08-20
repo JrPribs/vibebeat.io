@@ -36,15 +36,16 @@ interface RecordingSettings {
   metronomeSync: boolean;
 }
 
+// Scale definitions using Tonal.js
 const SCALES = {
-  'Major': [0, 2, 4, 5, 7, 9, 11],
-  'Natural Minor': [0, 2, 3, 5, 7, 8, 10],
-  'Dorian': [0, 2, 3, 5, 7, 9, 10],
-  'Mixolydian': [0, 2, 4, 5, 7, 9, 10],
-  'Pentatonic Major': [0, 2, 4, 7, 9],
-  'Pentatonic Minor': [0, 3, 5, 7, 10],
-  'Blues': [0, 3, 5, 6, 7, 10]
-};
+  'Major': 'major',
+  'Natural Minor': 'natural minor',
+  'Dorian': 'dorian', 
+  'Mixolydian': 'mixolydian',
+  'Pentatonic Major': 'major pentatonic',
+  'Pentatonic Minor': 'minor pentatonic',
+  'Blues': 'blues'
+} as const;
 
 const KEYS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
@@ -103,18 +104,19 @@ export const KeysView: React.FC = () => {
   
   const notes = generateNotes();
   
-  // Check if note is in scale
+  // Check if note is in scale using Tonal.js
   const isNoteInScale = useCallback((midiNumber: number): boolean => {
     if (!scaleLock.enabled) return true;
     
-    const keyIndex = KEYS.indexOf(scaleLock.key);
-    const scaleIntervals = SCALES[scaleLock.scale as keyof typeof SCALES];
+    const { Scale, Note } = require('tonal');
+    const scaleName = SCALES[scaleLock.scale as keyof typeof SCALES];
+    const scale = Scale.get(`${scaleLock.key} ${scaleName}`);
     
-    // Calculate the note's position relative to the key
-    const noteInOctave = (midiNumber % 12);
-    const relativeNote = (noteInOctave - keyIndex + 12) % 12;
+    // Convert MIDI number to note name and check if it's in the scale
+    const noteName = Note.fromMidi(midiNumber);
+    const noteClass = Note.pitchClass(noteName);
     
-    return scaleIntervals.includes(relativeNote);
+    return scale.notes.some((scaleNote: string) => Note.pitchClass(scaleNote) === noteClass);
   }, [scaleLock]);
   
   // Handle note trigger
@@ -652,10 +654,12 @@ export const KeysView: React.FC = () => {
                   </span>
                 </div>
                 <div className="text-xs text-gray-500">
-                  Notes: {SCALES[scaleLock.scale as keyof typeof SCALES].map(interval => {
-                    const noteIndex = (KEYS.indexOf(scaleLock.key) + interval) % 12;
-                    return KEYS[noteIndex];
-                  }).join(', ')}
+                  Notes: {(() => {
+                    const { Scale } = require('tonal');
+                    const scaleName = SCALES[scaleLock.scale as keyof typeof SCALES];
+                    const scale = Scale.get(`${scaleLock.key} ${scaleName}`);
+                    return scale.notes.join(', ');
+                  })()}
                 </div>
               </div>
             )}
