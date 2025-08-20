@@ -75,6 +75,20 @@ export {
   musicRadarKitLoader
 } from './musicradar-kit-loader';
 
+// Music Theory
+export {
+  musicTheoryService,
+  SCALE_TYPES,
+  CHORD_TYPES
+} from './music-theory-service';
+
+export type {
+  ScaleTypeName,
+  ChordTypeName,
+  ScaleInfo,
+  ChordInfo
+} from './music-theory-service';
+
 
 // Factory Content
 export {
