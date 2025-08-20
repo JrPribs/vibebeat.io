@@ -169,7 +169,7 @@ class ToneDrumService {
       // Load samples in parallel with proper async handling
       const loadPromises = Array.from(sampleMapping.entries()).map(async ([padName, sampleUrl]) => {
         const channel = this.padChannels.get(padName);
-        if (!channel) return null;
+        if (!channel) return { padName, success: false, error: 'No channel found' };
 
         try {
           // Properly dispose old sampler if it exists
@@ -190,10 +190,10 @@ class ToneDrumService {
             release: 0.1, // Quick release for tight drum sounds
             curve: 'exponential',
             onload: () => {
-              console.log(`✅ Sample loaded for ${padName}: ${sampleUrl}`);
+              console.log(`✅ Sample loaded for ${padName}`);
             },
             onerror: (error) => {
-              console.error(`❌ Failed to load sample for ${padName}:`, error);
+              console.warn(`⚠️ Sample failed to load for ${padName}:`, error);
             }
           });
 
@@ -207,18 +207,25 @@ class ToneDrumService {
           return { padName, success: true };
 
         } catch (error) {
-          console.error(`❌ Failed to create sampler for ${padName}:`, error);
-          return { padName, success: false };
+          console.warn(`⚠️ Failed to create sampler for ${padName}:`, error);
+          return { padName, success: false, error: error.message };
         }
       });
 
       // Wait for all samples to load
       const results = await Promise.all(loadPromises);
-      const successfulLoads = results.filter(result => result?.success).length;
-      console.log(`✅ Loaded ${successfulLoads}/${sampleMapping.size} samples successfully`);
+      const successfulPads = results.filter(result => result?.success).map(r => r?.padName);
+      const failedPads = results.filter(result => !result?.success).map(r => r?.padName);
+      
+      console.log(`🥁 Kit ${kitId} loaded: ${successfulPads.length}/16 pads`);
+      if (successfulPads.length > 0) {
+        console.log(`✅ Active pads: ${successfulPads.join(', ')}`);
+      }
+      if (failedPads.length > 0) {
+        console.log(`⭕ Empty pads: ${failedPads.join(', ')}`);
+      }
 
       this.playbackState.currentKit = kitId;
-      console.log(`✅ Loaded ${sampleMapping.size} samples for kit: ${kitId}`);
 
     } catch (error) {
       console.error('❌ Failed to load kit samples:', error);
@@ -255,12 +262,12 @@ class ToneDrumService {
 
     const sampler = this.padSamplers.get(padName);
     if (!sampler) {
-      console.warn(`No sampler found for pad: ${padName}`);
+      // Silently return for missing samples - incomplete kits are normal
       return;
     }
 
     if (!this.padSamples.has(padName)) {
-      console.warn(`No sample loaded for pad: ${padName}`);
+      // Silently return for missing samples - incomplete kits are normal
       return;
     }
 
