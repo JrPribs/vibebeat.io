@@ -21,24 +21,18 @@ export const audioUtils = {
     return timeMs + (quantizedTime - timeMs) * strength;
   },
   
-  // Convert MIDI note number to frequency
+  // Convert MIDI note number to frequency using Tonal.js
   midiToFreq: (midiNote: number): number => {
-    return 440 * Math.pow(2, (midiNote - 69) / 12);
+    const { Note } = require('tonal');
+    return Note.freq(Note.fromMidi(midiNote)) || 440;
   },
   
-  // Convert note name to MIDI number (e.g., "C4" -> 60)
+  // Convert note name to MIDI number using Tonal.js (e.g., "C4" -> 60)
   noteToMidi: (noteName: string): number => {
-    const noteMap: Record<string, number> = {
-      'C': 0, 'C#': 1, 'Db': 1, 'D': 2, 'D#': 3, 'Eb': 3,
-      'E': 4, 'F': 5, 'F#': 6, 'Gb': 6, 'G': 7, 'G#': 8,
-      'Ab': 8, 'A': 9, 'A#': 10, 'Bb': 10, 'B': 11
-    };
-    
-    const match = noteName.match(/^([A-G][#b]?)(\d+)$/);
-    if (!match) throw new Error(`Invalid note name: ${noteName}`);
-    
-    const [, note, octave] = match;
-    return noteMap[note] + (parseInt(octave) + 1) * 12;
+    const { Note } = require('tonal');
+    const midiNumber = Note.midi(noteName);
+    if (midiNumber === null) throw new Error(`Invalid note name: ${noteName}`);
+    return midiNumber;
   },
   
   // Convert decibels to linear gain
@@ -101,36 +95,31 @@ export const fileUtils = {
   },
 };
 
-// Scale Utilities
+// Scale Utilities using Tonal.js
 export const scaleUtils = {
-  // Define scale intervals (semitones from root)
+  // Supported scale types (mapped to Tonal.js scale names)
   scales: {
-    major: [0, 2, 4, 5, 7, 9, 11],
-    natural_minor: [0, 2, 3, 5, 7, 8, 10],
-    dorian: [0, 2, 3, 5, 7, 9, 10],
-    mixolydian: [0, 2, 4, 5, 7, 9, 10],
-    pentatonic: [0, 2, 4, 7, 9],
-  },
+    major: 'major',
+    natural_minor: 'natural minor',
+    dorian: 'dorian',
+    mixolydian: 'mixolydian',  
+    pentatonic: 'major pentatonic',
+  } as const,
   
-  // Get notes in a scale
+  // Get notes in a scale using Tonal.js
   getScaleNotes: (root: string, scaleName: keyof typeof scaleUtils.scales): string[] => {
-    const rootMidi = audioUtils.noteToMidi(root + '4');
-    const intervals = scaleUtils.scales[scaleName];
-    
-    return intervals.map(interval => {
-      const midiNote = rootMidi + interval;
-      const octave = Math.floor((midiNote - 12) / 12);
-      const noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-      const noteName = noteNames[midiNote % 12];
-      return `${noteName}${octave}`;
-    });
+    const { Scale } = require('tonal');
+    const tonalScaleName = scaleUtils.scales[scaleName];
+    const scale = Scale.get(`${root} ${tonalScaleName}`);
+    return scale.notes || [];
   },
   
-  // Check if note is in scale
+  // Check if note is in scale using Tonal.js
   isInScale: (note: string, root: string, scaleName: keyof typeof scaleUtils.scales): boolean => {
     const scaleNotes = scaleUtils.getScaleNotes(root, scaleName);
-    const noteWithoutOctave = note.replace(/\d+$/, '');
-    return scaleNotes.some(scaleNote => scaleNote.replace(/\d+$/, '') === noteWithoutOctave);
+    const { Note } = require('tonal');
+    const noteClass = Note.pitchClass(note);
+    return scaleNotes.some(scaleNote => Note.pitchClass(scaleNote) === noteClass);
   },
 };
 
