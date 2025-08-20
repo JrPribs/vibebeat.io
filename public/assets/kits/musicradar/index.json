@@ -1,0 +1,201 @@
+{
+  "name": "MusicRadar Professional Drum Kits",
+  "description": "High-quality drum samples from Computer Music magazine's MusicRadar collection, organized by category and style",
+  "version": "1.0.0",
+  "categories": {
+    "acoustic": {
+      "name": "Acoustic Drums",
+      "description": "Natural drum sounds recorded in professional studios with varying microphone techniques",
+      "kits": {
+        "01-acoustic-close": {
+          "name": "Acoustic Close",
+          "description": "Close-miked acoustic drums with tight, punchy sound",
+          "style": "Rock, Pop, Alternative",
+          "path": "acoustic/01-acoustic-close"
+        },
+        "02-acoustic-room": {
+          "name": "Acoustic Room",
+          "description": "Room-miked acoustic drums with natural ambience and space",
+          "style": "Classic Rock, Jazz, Indie",
+          "path": "acoustic/02-acoustic-room"
+        },
+        "03-acoustic-standard": {
+          "name": "Acoustic Standard",
+          "description": "Balanced acoustic drum sound with moderate processing",
+          "style": "Pop, Rock, Contemporary",
+          "path": "acoustic/03-acoustic-standard"
+        },
+        "04-acoustic-punchy": {
+          "name": "Acoustic Punchy",
+          "description": "Hard-hitting acoustic drums with aggressive transients",
+          "style": "Hard Rock, Metal, Punk",
+          "path": "acoustic/04-acoustic-punchy"
+        },
+        "05-acoustic-vintage": {
+          "name": "Acoustic Vintage",
+          "description": "Classic acoustic drum sound with vintage character",
+          "style": "Classic Rock, Blues, Retro",
+          "path": "acoustic/05-acoustic-vintage"
+        },
+        "06-acoustic-minimal": {
+          "name": "Acoustic Minimal",
+          "description": "Stripped-down acoustic drums with essential elements",
+          "style": "Indie, Folk, Minimalist",
+          "path": "acoustic/06-acoustic-minimal"
+        }
+      }
+    },
+    "electronic": {
+      "name": "Electronic Drums",
+      "description": "Synthesized and programmed drum sounds for modern electronic music production",
+      "kits": {
+        "01-electro-classic": {
+          "name": "Electro Classic",
+          "description": "Classic 80s-style electronic drums with analog character",
+          "style": "Synthwave, Retro, New Wave",
+          "path": "electronic/01-electro-classic"
+        },
+        "02-electro-hiphop": {
+          "name": "Electro Hip-Hop",
+          "description": "Hard-hitting electronic drums tailored for hip-hop production",
+          "style": "Hip-Hop, Trap, Urban",
+          "path": "electronic/02-electro-hiphop"
+        },
+        "03-electro-minimal": {
+          "name": "Electro Minimal",
+          "description": "Clean, simple electronic drums for minimal productions",
+          "style": "Minimal Techno, House, Ambient",
+          "path": "electronic/03-electro-minimal"
+        },
+        "04-electro-heavy": {
+          "name": "Electro Heavy",
+          "description": "Aggressive electronic drums with heavy processing",
+          "style": "Industrial, Dubstep, Heavy Electronic",
+          "path": "electronic/04-electro-heavy"
+        },
+        "05-electro-modern": {
+          "name": "Electro Modern",
+          "description": "Contemporary electronic drums with crisp digital sound",
+          "style": "EDM, Future Bass, Progressive House",
+          "path": "electronic/05-electro-modern"
+        },
+        "06-electro-punchy": {
+          "name": "Electro Punchy",
+          "description": "Sharp, punchy electronic drums with tight dynamics",
+          "style": "Electro House, Tech House, Dance",
+          "path": "electronic/06-electro-punchy"
+        },
+        "07-electro-deep": {
+          "name": "Electro Deep",
+          "description": "Deep, atmospheric electronic drums with low-end focus",
+          "style": "Deep House, Ambient Techno, Downtempo",
+          "path": "electronic/07-electro-deep"
+        }
+      }
+    },
+    "vinyl": {
+      "name": "Vinyl Drums",
+      "description": "Vintage drum sounds with the warmth and character of vinyl records",
+      "kits": {
+        "01-vinyl-classic": {
+          "name": "Vinyl Classic",
+          "description": "Classic vinyl drum sound with warm, nostalgic character",
+          "style": "Lo-Fi Hip-Hop, Jazz, Soul",
+          "path": "vinyl/01-vinyl-classic"
+        },
+        "02-vinyl-dusty": {
+          "name": "Vinyl Dusty",
+          "description": "Aged vinyl drums with dust and crackle for authentic vintage feel",
+          "style": "Boom Bap, Old School Hip-Hop, Jazz",
+          "path": "vinyl/02-vinyl-dusty"
+        },
+        "03-vinyl-lofi": {
+          "name": "Vinyl Lo-Fi",
+          "description": "Lo-fi vinyl drums with reduced fidelity and analog warmth",
+          "style": "Lo-Fi, Chillhop, Study Beats",
+          "path": "vinyl/03-vinyl-lofi"
+        },
+        "04-vinyl-crispy": {
+          "name": "Vinyl Crispy",
+          "description": "Crisp vinyl drums with enhanced high-frequency content",
+          "style": "Jazz-Hop, Nu-Jazz, Modern Soul",
+          "path": "vinyl/04-vinyl-crispy"
+        },
+        "05-vinyl-warm": {
+          "name": "Vinyl Warm",
+          "description": "Warm, saturated vinyl drums with tube-like compression",
+          "style": "Neo-Soul, R&B, Smooth Jazz",
+          "path": "vinyl/05-vinyl-warm"
+        }
+      }
+    },
+    "kurzweil": {
+      "name": "Kurzweil Drums",
+      "description": "Professional drum samples from Kurzweil synthesizers and sound modules",
+      "kits": {
+        "01-kurzweil-classic": {
+          "name": "Kurzweil Classic",
+          "description": "Classic Kurzweil drum sounds with signature digital character",
+          "style": "Pop, Rock, Contemporary",
+          "path": "kurzweil/01-kurzweil-classic"
+        },
+        "02-kurzweil-modern": {
+          "name": "Kurzweil Modern",
+          "description": "Modern Kurzweil drums with enhanced processing and dynamics",
+          "style": "Modern Pop, Electronic Rock, Hybrid",
+          "path": "kurzweil/02-kurzweil-modern"
+        },
+        "03-kurzweil-vintage": {
+          "name": "Kurzweil Vintage",
+          "description": "Vintage-style Kurzweil drums with retro character",
+          "style": "Retro, Synthwave, Classic Pop",
+          "path": "kurzweil/03-kurzweil-vintage"
+        },
+        "04-kurzweil-electronic": {
+          "name": "Kurzweil Electronic",
+          "description": "Pure electronic drums from Kurzweil sound engines",
+          "style": "Electronic, Synth-Pop, Dance",
+          "path": "kurzweil/04-kurzweil-electronic"
+        },
+        "05-kurzweil-experimental": {
+          "name": "Kurzweil Experimental",
+          "description": "Experimental and unique Kurzweil drum textures",
+          "style": "Experimental, Ambient, Sound Design",
+          "path": "kurzweil/05-kurzweil-experimental"
+        },
+        "06-kurzweil-ambient": {
+          "name": "Kurzweil Ambient",
+          "description": "Atmospheric Kurzweil drums for ambient productions",
+          "style": "Ambient, Cinematic, Atmospheric",
+          "path": "kurzweil/06-kurzweil-ambient"
+        },
+        "07-kurzweil-percussive": {
+          "name": "Kurzweil Percussive",
+          "description": "Percussive-focused Kurzweil drums with extended range",
+          "style": "World, Percussion, Ethnic",
+          "path": "kurzweil/07-kurzweil-percussive"
+        },
+        "08-kurzweil-dynamic": {
+          "name": "Kurzweil Dynamic",
+          "description": "Dynamic Kurzweil drums with expressive velocity response",
+          "style": "Jazz, Fusion, Progressive",
+          "path": "kurzweil/08-kurzweil-dynamic"
+        }
+      }
+    }
+  },
+  "stats": {
+    "totalKits": 26,
+    "totalCategories": 4,
+    "acousticKits": 6,
+    "electronicKits": 7,
+    "vinylKits": 5,
+    "kurzweilKits": 8
+  },
+  "usage": {
+    "basePath": "/assets/kits/musicradar/",
+    "format": "wav",
+    "sampleRate": "44100Hz",
+    "bitDepth": "16-bit"
+  }
+}

@@ -13,9 +13,9 @@ export function KitSelector({ selectedKit, onKitChange, disabled, isLoading }: K
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [kitCoverage, setKitCoverage] = useState<Map<string, number>>(new Map());
   
-  // Get all available kits grouped by category
-  const kitsByCategory = musicRadarKitLoader.getKitsGroupedByCategory();
-  const allKits = musicRadarKitLoader.getAvailableKits();
+  // Get all available kits grouped by category - memoized to prevent infinite loops
+  const kitsByCategory = useMemo(() => musicRadarKitLoader.getKitsGroupedByCategory(), []);
+  const allKits = useMemo(() => musicRadarKitLoader.getAvailableKits(), []);
   
   // Filter kits based on search and category - memoized to prevent infinite loops
   const filteredKits = useMemo(() => 
