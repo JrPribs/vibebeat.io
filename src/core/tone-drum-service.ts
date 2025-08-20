@@ -68,7 +68,7 @@ class ToneDrumService {
 
       // Create master channel for all drum pads
       this.masterChannel = new Tone.Channel({
-        volume: -12, // -12dB to prevent clipping with multiple simultaneous pads
+        volume: 0, // 0dB - let users control volume via UI controls
         pan: 0,
         mute: false,
         solo: false
@@ -122,28 +122,12 @@ class ToneDrumService {
 
   /**
    * Get default volume for specific pad types
+   * All pads now default to 0dB - users can adjust via UI controls
    */
   private getDefaultPadVolume(padName: PadName): number {
-    const volumeMap: { [key: string]: number } = {
-      'KICK': -6,        // Prominent but not overpowering
-      'SNARE': -8,       // Cutting through mix
-      'HIHAT_CLOSED': -12, // Quieter hi-hats
-      'HIHAT_OPEN': -10,
-      'CLAP': -10,
-      'CRASH': -8,       // Impactful but controlled
-      'RIDE': -10,
-      'TOM_HIGH': -8,
-      'TOM_MID': -8,
-      'TOM_FLOOR': -6,   // Deeper toms can be louder
-      'PERC_01': -12,    // Percussion elements quieter
-      'PERC_02': -12,
-      'PAD_13': -10,     // Generic pads
-      'PAD_14': -10,
-      'PAD_15': -10,
-      'PAD_16': -10
-    };
-
-    return volumeMap[padName] || -10;
+    // Return 0dB for all pads - let users control volume themselves
+    // No more assumptions about relative volumes
+    return 0;
   }
 
   /**
