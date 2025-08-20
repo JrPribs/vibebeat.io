@@ -73,10 +73,6 @@ export {
 
 // Mixer & Audio Processing
 export {
-  mixerService
-} from './mixer-service';
-
-export {
   toneMixerService
 } from './tone-mixer-service';
 
@@ -88,9 +84,6 @@ export {
   musicRadarKitLoader
 } from './musicradar-kit-loader';
 
-export {
-  useMixer
-} from './use-mixer';
 
 // Factory Content
 export {
