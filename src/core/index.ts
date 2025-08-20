@@ -39,16 +39,7 @@ export {
   useSampleCache
 } from './use-sample-cache';
 
-// Scheduler & Timing (Legacy AudioWorklet)
-export {
-  schedulerService
-} from './scheduler-service';
-
-export {
-  useScheduler
-} from './use-scheduler';
-
-// Tone.js Transport (Modern Replacement)
+// Tone.js Transport (Professional Timing)
 export {
   toneTransportService
 } from './tone-transport-service';
