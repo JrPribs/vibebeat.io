@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { padTriggerService } from './pad-trigger-service';
 import type { PadName } from '../shared/models/audio';
 
@@ -14,8 +14,6 @@ export function usePadTrigger() {
     activePads: new Set(),
     currentKit: 'musicradar-acoustic-01-close'
   });
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
-
   useEffect(() => {
     const unsubscribe = padTriggerService.onEvent((event) => {
       if (event.type === 'pad_triggered') {
@@ -24,7 +22,7 @@ export function usePadTrigger() {
           activePads: new Set([...prev.activePads, event.padName])
         }));
         
-        // Remove from active after short delay
+        // Remove from active after short delay for visual feedback
         setTimeout(() => {
           setState(prev => {
             const newActivePads = new Set(prev.activePads);
@@ -38,20 +36,8 @@ export function usePadTrigger() {
     return unsubscribe;
   }, []);
 
-  // Force refresh of sample state periodically during initialization
-  useEffect(() => {
-    const checkSampleState = () => {
-      setRefreshTrigger(prev => prev + 1);
-    };
-    
-    // Check every 500ms for the first 10 seconds during app startup
-    const interval = setInterval(checkSampleState, 500);
-    const timeout = setTimeout(() => clearInterval(interval), 10000);
-    
-    return () => {
-      clearInterval(interval);
-      clearTimeout(timeout);
-    };
+  const hasPadSample = useCallback((padName: PadName) => {
+    return padTriggerService.hasPadSample(padName);
   }, []);
 
   return {
@@ -68,12 +54,7 @@ export function usePadTrigger() {
         setState(prev => ({ ...prev, isLoading: false }));
       }
     },
-    hasPadSample: (padName: PadName) => {
-      // Force re-evaluation when refreshTrigger changes
-      return padTriggerService.hasPadSample(padName);
-    },
-    activeVoices: new Map(), // Tone.js manages voices internally
-    // Debug info
-    refreshCount: refreshTrigger
+    hasPadSample,
+    activeVoices: new Map() // Tone.js manages voices internally
   };
 }
