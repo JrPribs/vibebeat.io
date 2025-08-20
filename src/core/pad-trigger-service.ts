@@ -4,7 +4,6 @@
 import type { Sample, PadName, DrumTrack, ScheduledEvent } from '../shared/models/index';
 import { audioService } from './audio-service';
 import { sampleCache } from './sample-cache';
-import { schedulerService } from './scheduler-service';
 import { toneDrumService } from './tone-drum-service';
 
 interface PadTriggerOptions {
@@ -43,8 +42,7 @@ class PadTriggerService {
     
     // Legacy Web Audio API nodes removed - using pure Tone.js architecture
     
-    // Defer scheduler integration to avoid initialization race conditions
-    setTimeout(() => this.setupSchedulerIntegration(), 0);
+    // Scheduler integration removed - using pure Tone.js architecture
     
     // Audio service integration no longer needed - using pure Tone.js architecture
   }
@@ -75,43 +73,8 @@ class PadTriggerService {
    */
 
   /**
-   * Set up integration with scheduler service
+   * Scheduler integration removed - pattern playback now handled by ToneTransportService
    */
-  private setupSchedulerIntegration(): void {
-    // Ensure scheduler service is available and has required methods
-    if (!schedulerService || typeof schedulerService.onEvent !== 'function') {
-      console.warn('Scheduler service not ready, retrying integration in 100ms...');
-      setTimeout(() => this.setupSchedulerIntegration(), 100);
-      return;
-    }
-
-    try {
-      // Listen for scheduled events from the scheduler
-      schedulerService.onEvent((event) => {
-        if (event.type === 'pad' && event.data.padName) {
-          this.triggerPad(
-            event.data.padName as PadName,
-            event.data.velocity || 100
-          );
-        }
-      });
-
-      // Listen for transport changes
-      schedulerService.onTransportChange((state) => {
-        if (state.isPlaying && !this.playbackState.isPlaying) {
-          this.startPatternPlayback();
-        } else if (!state.isPlaying && this.playbackState.isPlaying) {
-          this.stopPatternPlayback();
-        }
-      });
-      
-      console.log('Scheduler integration successfully established');
-    } catch (error) {
-      console.error('Failed to setup scheduler integration:', error);
-      // Retry after a delay
-      setTimeout(() => this.setupSchedulerIntegration(), 500);
-    }
-  }
 
   /**
    * Load samples for a specific kit using Tone.js
@@ -239,39 +202,7 @@ class PadTriggerService {
     console.log('Pattern scheduling temporarily disabled during Phase 9 implementation');
     return;
     
-    /* 
-    const pattern = this.playbackState.currentPattern as DrumTrack | null;
-    if (!pattern || !pattern.pattern || !Array.isArray(pattern.pattern.pads)) {
-      return;
-    }
-
-    // Clear existing events
-    this.clearScheduledEvents();
-
-    // Schedule events for each pad
-    const patternData = pattern.pattern;
-    for (const padData of patternData.pads) {
-      if (!padData || !Array.isArray(padData.hits)) continue;
-      
-      for (const hit of padData.hits) {
-        const event: ScheduledEvent = {
-          id: `${padData.pad}-${hit.step}-${Date.now()}`,
-          type: 'pad',
-          time: 0, // Will be calculated by scheduler
-          data: {
-            padName: padData.pad,
-            velocity: hit.vel
-          }
-        };
-        
-        // Schedule with the scheduler service
-        // The scheduler will call our trigger method at the right time
-        schedulerService.scheduleEvent(event);
-        
-        this.playbackState.scheduledEvents.push(event);
-      }
-    }
-    */
+    // Pattern scheduling functionality removed - now handled by ToneTransportService
     
     console.log(
       `Scheduled ${this.playbackState.scheduledEvents.length} pattern events`
@@ -279,10 +210,9 @@ class PadTriggerService {
   }
 
   /**
-   * Clear all scheduled events
+   * Clear all scheduled events - now handled by ToneTransportService
    */
   private clearScheduledEvents(): void {
-    schedulerService.clearEvents();
     this.playbackState.scheduledEvents = [];
   }
 

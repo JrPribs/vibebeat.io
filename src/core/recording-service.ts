@@ -1,7 +1,6 @@
 // Recording Service - Phase 4
 // Comprehensive microphone recording with bar-sync, processing, and assignment
 
-import { schedulerService } from './scheduler-service';
 
 export interface RecordingOptions {
   barSync: boolean;
@@ -197,22 +196,14 @@ class RecordingService {
     };
 
     if (options.barSync) {
-      // Wait for next downbeat using scheduler
-      this.isWaitingForDownbeat = true;
-      this.notifyListeners();
-      
-      // Subscribe to scheduler for next downbeat
-      const unsubscribeStep = schedulerService.onStep((step, beat, bar, time) => {
-        if (step === 0 && beat === 0) { // Downbeat
-          unsubscribeStep();
-          this.isWaitingForDownbeat = false;
-          if (options.countIn) {
-            this.startCountIn(() => this.actuallyStartRecording(options));
-          } else {
-            this.actuallyStartRecording(options);
-          }
-        }
-      });
+      // Bar sync functionality temporarily disabled - can be re-implemented with ToneTransportService
+      console.log('Bar sync recording requested but temporarily disabled');
+      this.isWaitingForDownbeat = false;
+      if (options.countIn) {
+        this.startCountIn(() => this.actuallyStartRecording(options));
+      } else {
+        this.actuallyStartRecording(options);
+      }
     } else {
       if (options.countIn) {
         this.startCountIn(() => this.actuallyStartRecording(options));

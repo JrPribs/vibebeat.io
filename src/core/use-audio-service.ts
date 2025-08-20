@@ -4,7 +4,6 @@
 import { useEffect, useCallback, useRef } from 'react';
 import { useStore } from './store-context';
 import { audioService } from './audio-service';
-import { schedulerService } from './scheduler-service';
 import { tonePianoService } from './tone-piano-service';
 import { toneMixerService } from './tone-mixer-service';
 import * as Tone from 'tone';
@@ -38,14 +37,7 @@ export const useAudioService = () => {
         // Initialize AudioService
         await audioService.initialize(state.audio.latencyMode);
         
-        // Initialize SchedulerService after AudioService is ready
-        try {
-          await schedulerService.initialize();
-          console.log('Complete audio system initialized successfully');
-        } catch (schedulerError) {
-          console.error('Failed to initialize scheduler:', schedulerError);
-          // Audio still works without scheduler, but timing won't be sample-accurate
-        }
+        console.log('Complete audio system initialized successfully');
         
         dispatch({ type: 'SET_AUDIO', payload: { isLoading: false } });
         userInteractionRef.current = true;
@@ -186,14 +178,7 @@ export const useAudioService = () => {
       // Initialize AudioService
       await audioService.initialize(state.audio.latencyMode);
       
-      // Initialize SchedulerService after AudioService is ready
-      try {
-        await schedulerService.initialize();
-        console.log('Complete audio system initialized successfully');
-      } catch (schedulerError) {
-        console.error('Failed to initialize scheduler:', schedulerError);
-        // Audio still works without scheduler, but timing won't be sample-accurate
-      }
+      console.log('Complete audio system initialized successfully');
       
       dispatch({ type: 'SET_AUDIO', payload: { isLoading: false } });
       userInteractionRef.current = true;
