@@ -68,10 +68,6 @@ export {
 
 // Piano Synthesis & Playback
 export {
-  pianoService
-} from './piano-service';
-
-export {
   tonePianoService
 } from './tone-piano-service';
 
