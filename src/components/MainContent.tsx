@@ -3,6 +3,9 @@ import { useUI, useStore } from '../core/store-context';
 import { PadsView } from '../features/pads';
 import { KeysView } from '../features/keys';
 import { MixerView } from '../features/mixer';
+import { SampleView } from '../features/sample';
+import { RecordView } from '../features/record';
+import { ArrangeView } from '../features/arrange';
 
 export function MainContent(): JSX.Element {
   const { currentView } = useUI();
@@ -25,28 +28,13 @@ export function MainContent(): JSX.Element {
         );
       
       case 'sample':
-        return (
-          <div className="p-6">
-            <h2 className="text-2xl font-bold mb-4">Sample Editor</h2>
-            <p className="text-gray-400">Sample editing features coming soon...</p>
-          </div>
-        );
+        return <SampleView />;
       
       case 'record':
-        return (
-          <div className="p-6">
-            <h2 className="text-2xl font-bold mb-4">Recording</h2>
-            <p className="text-gray-400">Recording features coming soon...</p>
-          </div>
-        );
+        return <RecordView />;
       
       case 'arrange':
-        return (
-          <div className="p-6">
-            <h2 className="text-2xl font-bold mb-4">Arrangement</h2>
-            <p className="text-gray-400">Arrangement features coming soon...</p>
-          </div>
-        );
+        return <ArrangeView />;
       
       default:
         return (

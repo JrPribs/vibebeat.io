@@ -7,17 +7,19 @@ import { AudioProvider } from './shared/ui/AudioProvider';
 import { OnboardingManager } from './features/onboarding/index';
 import { HelpModal, useHotkeys } from './features/help/index';
 import { AudioErrorBoundary, ErrorBoundary } from './components/ErrorBoundary';
+import { ExportModal } from './components/ExportModal';
 
 const AppContent: React.FC = () => {
   const project = useProject();
   const { actions, state } = useStore();
   const { showHelp } = state.ui;
+  const [showExportModal, setShowExportModal] = React.useState(false);
   
   // Initialize global hotkeys
   useHotkeys();
 
   const handleExportClick = () => {
-    console.log('Export clicked - modal will be implemented');
+    setShowExportModal(true);
   };
 
   const handleProjectsClick = () => {
@@ -50,6 +52,12 @@ const AppContent: React.FC = () => {
       
       {/* Phase 9: Help System */}
       {showHelp && <HelpModal onClose={() => actions.toggleHelp()} />}
+      
+      {/* Export Modal */}
+      <ExportModal 
+        isOpen={showExportModal} 
+        onClose={() => setShowExportModal(false)} 
+      />
     </div>
   );
 };

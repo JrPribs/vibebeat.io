@@ -9,5 +9,5 @@ interface HeaderProps {
 }
 
 export function Header(props: HeaderProps): JSX.Element {
-  return <TopBar />;
+  return <TopBar onExportClick={props.onExportClick} />;
 }

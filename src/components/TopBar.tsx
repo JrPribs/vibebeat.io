@@ -3,7 +3,11 @@ import { Play, Square, Volume2, Settings, Download, LogIn } from 'lucide-react';
 import { audioService } from '../core/audio-service';
 import type { AudioContextState } from '../shared/models/audio';
 
-export function TopBar(): JSX.Element {
+interface TopBarProps {
+  onExportClick?: () => void;
+}
+
+export function TopBar({ onExportClick }: TopBarProps): JSX.Element {
   const [bpm, setBpm] = useState(120);
   const [isPlaying, setIsPlaying] = useState(false);
   const [audioState, setAudioState] = useState<AudioContextState | null>(null);
@@ -135,7 +139,10 @@ export function TopBar(): JSX.Element {
           </div>
         )}
         
-        <button className="flex items-center space-x-1 px-3 py-2 bg-green-600 hover:bg-green-700 rounded-lg transition-colors">
+        <button 
+          onClick={onExportClick}
+          className="flex items-center space-x-1 px-3 py-2 bg-green-600 hover:bg-green-700 rounded-lg transition-colors"
+        >
           <Download className="h-4 w-4" />
           <span className="text-sm">Export</span>
         </button>
