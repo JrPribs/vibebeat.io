@@ -359,6 +359,58 @@ class ToneDrumService {
   }
 
   /**
+   * Assign a sample to a single pad without clearing others
+   */
+  async assignPadSample(padName: PadName, sampleUrl: string): Promise<void> {
+    try {
+      console.log(`🔄 Assigning sample to ${padName}: ${sampleUrl}`);
+
+      const channel = this.padChannels.get(padName);
+      if (!channel) {
+        throw new Error(`No channel found for pad ${padName}`);
+      }
+
+      // Properly dispose old sampler if it exists
+      if (this.padSamplers.has(padName)) {
+        const oldSampler = this.padSamplers.get(padName);
+        if (oldSampler) {
+          oldSampler.disconnect();
+          oldSampler.dispose();
+        }
+      }
+
+      // Create a new sampler with the specific sample loaded
+      const sampler = new Tone.Sampler({
+        urls: {
+          'C4': sampleUrl
+        },
+        attack: 0.001, // Very fast attack for percussive sounds
+        release: 0.1, // Quick release for tight drum sounds
+        curve: 'exponential',
+        onload: () => {
+          console.log(`✅ Sample loaded for ${padName}`);
+        },
+        onerror: (error) => {
+          console.warn(`⚠️ Sample failed to load for ${padName}:`, error);
+        }
+      });
+
+      // Connect: Sampler -> Channel (channel already connected to master)
+      sampler.connect(channel);
+
+      // Store the new sampler and sample URL
+      this.padSamplers.set(padName, sampler);
+      this.padSamples.set(padName, sampleUrl);
+
+      console.log(`✅ Successfully assigned sample to ${padName}`);
+
+    } catch (error) {
+      console.error(`❌ Failed to assign sample to ${padName}:`, error);
+      throw error;
+    }
+  }
+
+  /**
    * Check if a pad has a loaded sample
    */
   hasPadSample(padName: PadName): boolean {

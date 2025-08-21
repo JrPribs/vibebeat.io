@@ -34,12 +34,8 @@ export function PadAssignment({
   const handleSoundSelect = async (sampleUrl: string, targetPadName: PadName) => {
     setIsAssigning(true);
     try {
-      // Create a temporary sample mapping with just this pad
-      const tempMapping = new Map<PadName, string>();
-      tempMapping.set(targetPadName, sampleUrl);
-      
-      // Load the new sample for this specific pad
-      await toneDrumService.loadKitSamples(`custom-${Date.now()}`, tempMapping);
+      // Assign the sample to this specific pad without affecting others
+      await toneDrumService.assignPadSample(targetPadName, sampleUrl);
       
       setCurrentSample(sampleUrl);
       onAssignmentChange?.(targetPadName, sampleUrl);
